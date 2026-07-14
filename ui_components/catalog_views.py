@@ -27,7 +27,15 @@ class AsteroidesView(BaseCrudView):
     ]
 
     def __init__(self, master, db):
-        super().__init__(master, db, self.COLUMNS)
+        es_maestro = db.sede == "chile"
+        super().__init__(
+            master,
+            db,
+            self.COLUMNS,
+            allow_create=es_maestro,
+            allow_edit=es_maestro,
+            allow_delete=es_maestro,
+        )
 
     def fetch_rows(self):
         return asteroides.get_asteroides(self.db)
@@ -126,7 +134,15 @@ class ProgramasView(BaseCrudView):
     ESTADOS = ["Activo", "Finalizado"]
 
     def __init__(self, master, db):
-        super().__init__(master, db, self.COLUMNS)
+        es_maestro = db.sede == "chile"
+        super().__init__(
+            master,
+            db,
+            self.COLUMNS,
+            allow_create=es_maestro,
+            allow_edit=es_maestro,
+            allow_delete=es_maestro,
+        )
 
     def fetch_rows(self):
         return programas.get_programas(self.db)
@@ -212,7 +228,15 @@ class ObservatoriosView(BaseCrudView):
     ]
 
     def __init__(self, master, db):
-        super().__init__(master, db, self.COLUMNS)
+        es_maestro = db.sede == "chile"
+        super().__init__(
+            master,
+            db,
+            self.COLUMNS,
+            allow_create=es_maestro,
+            allow_edit=es_maestro,
+            allow_delete=es_maestro,
+        )
 
     def fetch_rows(self):
         return observatorios.get_observatorios(self.db)
