@@ -33,12 +33,13 @@ def get_observaciones(db):
         sql = """
             SELECT O.Cod_Cientifico,
                    O.Id_Asteroide,
-                   C.Nombre  AS Cientifico,
+                   C.Primer_Nombre + ' ' + C.Primer_Apellido AS Cientifico,
                    A.Nombre  AS Asteroide,
                    O.Fecha_Hora,
+                   O.Id_Observatorio,
                    O.Magnitud_Aparente,
                    O.Distancia_Relativa,
-                   O.Velocidad
+                   O.Velocidad_Aproximada AS Velocidad -- Alias para mantener compatibilidad con la UI
             FROM VistaGlobalObservaciones O
             LEFT JOIN VistaGlobalCientificos C
                    ON C.Cod_Cientifico = O.Cod_Cientifico
@@ -54,12 +55,13 @@ def get_observaciones(db):
         sql = """
             SELECT O.Cod_Cientifico,
                    O.Id_Asteroide,
-                   C.Nombre  AS Cientifico,
+                   C.Primer_Nombre + ' ' + C.Primer_Apellido AS Cientifico,
                    A.Nombre  AS Asteroide,
                    O.Fecha_Hora,
+                   O.Id_Observatorio,
                    O.Magnitud_Aparente,
                    O.Distancia_Relativa,
-                   O.Velocidad,
+                   O.Velocidad_Aproximada AS Velocidad, -- Alias para la UI
                    E.Tipo_Espectral
             FROM VistaGlobalObservaciones O
             LEFT JOIN VistaGlobalCientificos C
@@ -84,51 +86,47 @@ def get_observaciones(db):
 # CREATE
 # --------------------------------------------------------------------- #
 def insert_observacion(db, data):
+    base_sql = """
+        INSERT INTO VistaGlobalObservaciones
+            (Cod_Cientifico, Id_Asteroide, Fecha_Hora, Id_Observatorio,
+             Magnitud_Aparente, Distancia_Relativa, Velocidad_Aproximada)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
     """
-    data = {Cod_Cientifico, Id_Asteroide, Fecha_Hora,
-            Magnitud_Aparente, Distancia_Relativa, Velocidad,
-            Tipo_Espectral (opcional, solo España)}
-    """
+    # Mapeamos data["Velocidad"] (viene de la UI) al campo de la BD
+    base_params = (
+        data["Cod_Cientifico"],
+        data["Id_Asteroide"],
+        data["Fecha_Hora"],
+        db.cfg["id_observatorio"],
+        data["Magnitud_Aparente"],
+        data["Distancia_Relativa"],
+        data["Velocidad"],
+    )
+
     if db.sede == "chile":
-        sql = """
-            INSERT INTO Datos_Observacion_001
-                (Cod_Cientifico, Id_Asteroide, Fecha_Hora, Id_Observatorio,
-                 Magnitud_Aparente, Distancia_Relativa, Velocidad)
-            VALUES (?, ?, ?, 1, ?, ?, ?)
-        """
-        return db.execute(sql, (
-            data["Cod_Cientifico"], data["Id_Asteroide"], data["Fecha_Hora"],
-            data["Magnitud_Aparente"], data["Distancia_Relativa"],
-            data["Velocidad"],
-        ))
+        return db.execute(base_sql, base_params)
 
     elif db.sede == "espana":
-        # Atomicidad: observación + (opcional) tipo espectral en UNA transacción.
-        statements = [(
-            """
-            INSERT INTO Datos_Observacion_002
-                (Cod_Cientifico, Id_Asteroide, Fecha_Hora, Id_Observatorio,
-                 Magnitud_Aparente, Distancia_Relativa, Velocidad)
-            VALUES (?, ?, ?, 2, ?, ?, ?)
-            """,
-            (data["Cod_Cientifico"], data["Id_Asteroide"], data["Fecha_Hora"],
-             data["Magnitud_Aparente"], data["Distancia_Relativa"],
-             data["Velocidad"]),
-        )]
-
+        # España requiere atomicidad con la tabla de extensión vertical
+        statements = [(base_sql, base_params)]
         tipo = data.get("Tipo_Espectral")
         if tipo:
-            statements.append((
-                """
+            statements.append(
+                (
+                    """
                 INSERT INTO Datos_Espectral
                     (Cod_Cientifico, Id_Asteroide, Fecha_Hora,
                      Id_Observatorio, Tipo_Espectral)
                 VALUES (?, ?, ?, 2, ?)
                 """,
-                (data["Cod_Cientifico"], data["Id_Asteroide"],
-                 data["Fecha_Hora"], tipo),
-            ))
-
+                    (
+                        data["Cod_Cientifico"],
+                        data["Id_Asteroide"],
+                        data["Fecha_Hora"],
+                        tipo,
+                    ),
+                )
+            )
         return db.execute_transaction(statements)
 
     else:
@@ -139,58 +137,50 @@ def insert_observacion(db, data):
 # UPDATE
 # --------------------------------------------------------------------- #
 def update_observacion(db, pk, data):
+    # Transparencia total de ruteo: El WHERE ya no exige saber la Sede
+    base_sql = """
+        UPDATE VistaGlobalObservaciones
+        SET Magnitud_Aparente = ?, Distancia_Relativa = ?, Velocidad_Aproximada = ?
+        WHERE Cod_Cientifico = ? AND Id_Asteroide = ? AND Fecha_Hora = ?
     """
-    pk   = {Cod_Cientifico, Id_Asteroide, Fecha_Hora}  (clave original)
-    data = valores nuevos de medición (+ Tipo_Espectral en España).
-    """
+    base_params = (
+        data["Magnitud_Aparente"],
+        data["Distancia_Relativa"],
+        data["Velocidad"],
+        pk["Cod_Cientifico"],
+        pk["Id_Asteroide"],
+        pk["Fecha_Hora"],
+    )
+
     if db.sede == "chile":
-        sql = """
-            UPDATE Datos_Observacion_001
-            SET Magnitud_Aparente = ?, Distancia_Relativa = ?, Velocidad = ?
-            WHERE Cod_Cientifico = ? AND Id_Asteroide = ?
-              AND Fecha_Hora = ? AND Id_Observatorio = 1
-        """
-        return db.execute(sql, (
-            data["Magnitud_Aparente"], data["Distancia_Relativa"],
-            data["Velocidad"],
-            pk["Cod_Cientifico"], pk["Id_Asteroide"], pk["Fecha_Hora"],
-        ))
+        return db.execute(base_sql, base_params)
 
     elif db.sede == "espana":
-        statements = [(
-            """
-            UPDATE Datos_Observacion_002
-            SET Magnitud_Aparente = ?, Distancia_Relativa = ?, Velocidad = ?
-            WHERE Cod_Cientifico = ? AND Id_Asteroide = ?
-              AND Fecha_Hora = ? AND Id_Observatorio = 2
-            """,
-            (data["Magnitud_Aparente"], data["Distancia_Relativa"],
-             data["Velocidad"],
-             pk["Cod_Cientifico"], pk["Id_Asteroide"], pk["Fecha_Hora"]),
-        )]
+        statements = [(base_sql, base_params)]
 
-        # Sincronizar extensión vertical: upsert manual (DELETE + INSERT)
-        statements.append((
-            """
+        # Sincronizamos la extensión vertical (Borrar e insertar de nuevo)
+        statements.append(
+            (
+                """
             DELETE FROM Datos_Espectral
-            WHERE Cod_Cientifico = ? AND Id_Asteroide = ?
-              AND Fecha_Hora = ? AND Id_Observatorio = 2
+            WHERE Cod_Cientifico = ? AND Id_Asteroide = ? AND Fecha_Hora = ?
             """,
-            (pk["Cod_Cientifico"], pk["Id_Asteroide"], pk["Fecha_Hora"]),
-        ))
+                (pk["Cod_Cientifico"], pk["Id_Asteroide"], pk["Fecha_Hora"]),
+            )
+        )
 
         tipo = data.get("Tipo_Espectral")
         if tipo:
-            statements.append((
-                """
+            statements.append(
+                (
+                    """
                 INSERT INTO Datos_Espectral
-                    (Cod_Cientifico, Id_Asteroide, Fecha_Hora,
-                     Id_Observatorio, Tipo_Espectral)
+                    (Cod_Cientifico, Id_Asteroide, Fecha_Hora, Id_Observatorio, Tipo_Espectral)
                 VALUES (?, ?, ?, 2, ?)
                 """,
-                (pk["Cod_Cientifico"], pk["Id_Asteroide"],
-                 pk["Fecha_Hora"], tipo),
-            ))
+                    (pk["Cod_Cientifico"], pk["Id_Asteroide"], pk["Fecha_Hora"], tipo),
+                )
+            )
 
         return db.execute_transaction(statements)
 
@@ -202,35 +192,27 @@ def update_observacion(db, pk, data):
 # DELETE
 # --------------------------------------------------------------------- #
 def delete_observacion(db, pk):
+    # Transparencia total de ruteo: El WHERE ya no exige saber la Sede
+    base_sql = """
+        DELETE FROM VistaGlobalObservaciones
+        WHERE Cod_Cientifico = ? AND Id_Asteroide = ? AND Fecha_Hora = ?
+    """
+    base_params = (pk["Cod_Cientifico"], pk["Id_Asteroide"], pk["Fecha_Hora"])
+
     if db.sede == "chile":
-        sql = """
-            DELETE FROM Datos_Observacion_001
-            WHERE Cod_Cientifico = ? AND Id_Asteroide = ?
-              AND Fecha_Hora = ? AND Id_Observatorio = 1
-        """
-        return db.execute(sql, (
-            pk["Cod_Cientifico"], pk["Id_Asteroide"], pk["Fecha_Hora"],
-        ))
+        return db.execute(base_sql, base_params)
 
     elif db.sede == "espana":
-        # Primero la extensión vertical (integridad referencial), luego la base.
+        # Primero borramos la dependencia (Datos_Espectral) por integridad referencial
         statements = [
             (
                 """
                 DELETE FROM Datos_Espectral
-                WHERE Cod_Cientifico = ? AND Id_Asteroide = ?
-                  AND Fecha_Hora = ? AND Id_Observatorio = 2
+                WHERE Cod_Cientifico = ? AND Id_Asteroide = ? AND Fecha_Hora = ?
                 """,
                 (pk["Cod_Cientifico"], pk["Id_Asteroide"], pk["Fecha_Hora"]),
             ),
-            (
-                """
-                DELETE FROM Datos_Observacion_002
-                WHERE Cod_Cientifico = ? AND Id_Asteroide = ?
-                  AND Fecha_Hora = ? AND Id_Observatorio = 2
-                """,
-                (pk["Cod_Cientifico"], pk["Id_Asteroide"], pk["Fecha_Hora"]),
-            ),
+            (base_sql, base_params),
         ]
         return db.execute_transaction(statements)
 
