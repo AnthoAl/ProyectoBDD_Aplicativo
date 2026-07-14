@@ -19,14 +19,14 @@ from ui_components.base_crud_view import BaseCrudView
 SIN_ESPECTRO = "— (sin dato)"
 
 COLUMNS = [
-    {"key": "num",   "title": "#",                "weight": 1, "anchor": "center", "min": 40},
-    {"key": "cient", "title": "CIENTÍFICO",       "weight": 4, "anchor": "w"},
-    {"key": "aster", "title": "ASTEROIDE",        "weight": 4, "anchor": "w"},
-    {"key": "fecha", "title": "FECHA UTC",        "weight": 4, "anchor": "center"},
-    {"key": "mag",   "title": "MAG. APARENTE",    "weight": 3, "anchor": "center"},
-    {"key": "dist",  "title": "DISTANCIA REL.",   "weight": 3, "anchor": "center"},
-    {"key": "vel",   "title": "VELOCIDAD",        "weight": 3, "anchor": "center"},
-    {"key": "spec",  "title": "◆ TIPO ESPECTRAL", "weight": 3, "anchor": "center"},
+    {"key": "num", "title": "#", "weight": 1, "anchor": "center", "min": 40},
+    {"key": "cient", "title": "CIENTÍFICO", "weight": 4, "anchor": "w"},
+    {"key": "aster", "title": "ASTEROIDE", "weight": 4, "anchor": "w"},
+    {"key": "fecha", "title": "FECHA UTC", "weight": 4, "anchor": "center"},
+    {"key": "mag", "title": "MAG. APARENTE", "weight": 3, "anchor": "center"},
+    {"key": "dist", "title": "DISTANCIA REL.", "weight": 3, "anchor": "center"},
+    {"key": "vel", "title": "VELOCIDAD", "weight": 3, "anchor": "center"},
+    {"key": "spec", "title": "◆ TIPO ESPECTRAL", "weight": 3, "anchor": "center"},
 ]
 
 
@@ -42,7 +42,9 @@ class ObservationsSpain(BaseCrudView):
     # ------------------------- READ ------------------------- #
     def fetch_rows(self):
         self._cient_map = {
-            f"{c['Cod_Cientifico']} — {c['Nombre']}": c["Cod_Cientifico"]
+            f"{c['Cod_Cientifico']} — {c['Primer_Nombre']} {c['Primer_Apellido']}": c[
+                "Cod_Cientifico"
+            ]
             for c in cientificos.get_cientificos(self.db)
         }
         self._aster_map = {
@@ -77,25 +79,54 @@ class ObservationsSpain(BaseCrudView):
 
         if editing:
             fields = [
-                {"key": "Cod_Cientifico", "label": "Científico (PK)",
-                 "widget": "entry", "mono": True, "readonly": True,
-                 "default": row["Cod_Cientifico"]},
-                {"key": "Id_Asteroide", "label": "Asteroide (PK)",
-                 "widget": "entry", "mono": True, "readonly": True,
-                 "default": row["Id_Asteroide"]},
-                {"key": "Fecha_Hora", "label": "Fecha / Hora UTC (PK)",
-                 "widget": "entry", "mono": True, "readonly": True,
-                 "default": str(row["Fecha_Hora"])[:16]},
+                {
+                    "key": "Cod_Cientifico",
+                    "label": "Científico (PK)",
+                    "widget": "entry",
+                    "mono": True,
+                    "readonly": True,
+                    "default": row["Cod_Cientifico"],
+                },
+                {
+                    "key": "Id_Asteroide",
+                    "label": "Asteroide (PK)",
+                    "widget": "entry",
+                    "mono": True,
+                    "readonly": True,
+                    "default": row["Id_Asteroide"],
+                },
+                {
+                    "key": "Fecha_Hora",
+                    "label": "Fecha / Hora UTC (PK)",
+                    "widget": "entry",
+                    "mono": True,
+                    "readonly": True,
+                    "default": str(row["Fecha_Hora"])[:16],
+                },
             ]
         else:
             fields = [
-                {"key": "Cod_Cientifico", "label": "Científico",
-                 "widget": "dropdown", "values": cient_opts, "mono": True},
-                {"key": "Id_Asteroide", "label": "Asteroide",
-                 "widget": "dropdown", "values": aster_opts, "mono": True},
-                {"key": "Fecha_Hora", "label": "Fecha / Hora UTC",
-                 "widget": "entry", "mono": True,
-                 "placeholder": "YYYY-MM-DD HH:MM"},
+                {
+                    "key": "Cod_Cientifico",
+                    "label": "Científico",
+                    "widget": "dropdown",
+                    "values": cient_opts,
+                    "mono": True,
+                },
+                {
+                    "key": "Id_Asteroide",
+                    "label": "Asteroide",
+                    "widget": "dropdown",
+                    "values": aster_opts,
+                    "mono": True,
+                },
+                {
+                    "key": "Fecha_Hora",
+                    "label": "Fecha / Hora UTC",
+                    "widget": "entry",
+                    "mono": True,
+                    "placeholder": "YYYY-MM-DD HH:MM",
+                },
             ]
 
         spec_default = SIN_ESPECTRO
@@ -103,20 +134,36 @@ class ObservationsSpain(BaseCrudView):
             spec_default = row["Tipo_Espectral"]
 
         fields += [
-            {"key": "Magnitud_Aparente", "label": "Magnitud aparente",
-             "widget": "entry", "mono": True,
-             "default": row.get("Magnitud_Aparente") if editing else ""},
-            {"key": "Distancia_Relativa", "label": "Distancia relativa (UA)",
-             "widget": "entry", "mono": True,
-             "default": row.get("Distancia_Relativa") if editing else ""},
-            {"key": "Velocidad", "label": "Velocidad (km/s)",
-             "widget": "entry", "mono": True,
-             "default": row.get("Velocidad") if editing else ""},
+            {
+                "key": "Magnitud_Aparente",
+                "label": "Magnitud aparente",
+                "widget": "entry",
+                "mono": True,
+                "default": row.get("Magnitud_Aparente") if editing else "",
+            },
+            {
+                "key": "Distancia_Relativa",
+                "label": "Distancia relativa (UA)",
+                "widget": "entry",
+                "mono": True,
+                "default": row.get("Distancia_Relativa") if editing else "",
+            },
+            {
+                "key": "Velocidad",
+                "label": "Velocidad (km/s)",
+                "widget": "entry",
+                "mono": True,
+                "default": row.get("Velocidad") if editing else "",
+            },
             # ---- Campo EXCLUSIVO del Nodo 2 (extensión vertical) ----
-            {"key": "Tipo_Espectral", "label": "Tipo espectral",
-             "widget": "dropdown", "mono": True,
-             "values": [SIN_ESPECTRO] + TIPOS_ESPECTRALES,
-             "default": spec_default},
+            {
+                "key": "Tipo_Espectral",
+                "label": "Tipo espectral",
+                "widget": "dropdown",
+                "mono": True,
+                "values": [SIN_ESPECTRO] + TIPOS_ESPECTRALES,
+                "default": spec_default,
+            },
         ]
         return fields
 
@@ -134,24 +181,32 @@ class ObservationsSpain(BaseCrudView):
 
     def do_insert(self, data):
         payload = self._payload(data)
-        payload.update({
-            "Cod_Cientifico": self._cient_map.get(data["Cod_Cientifico"],
-                                                  data["Cod_Cientifico"]),
-            "Id_Asteroide": self._aster_map.get(data["Id_Asteroide"],
-                                                data["Id_Asteroide"]),
-            "Fecha_Hora": data["Fecha_Hora"],
-        })
+        payload.update(
+            {
+                "Cod_Cientifico": self._cient_map.get(
+                    data["Cod_Cientifico"], data["Cod_Cientifico"]
+                ),
+                "Id_Asteroide": self._aster_map.get(
+                    data["Id_Asteroide"], data["Id_Asteroide"]
+                ),
+                "Fecha_Hora": data["Fecha_Hora"],
+            }
+        )
         # Transacción atómica: Datos_Observacion_002 (+ Datos_Espectral)
         observaciones.insert_observacion(self.db, payload)
 
     def do_update(self, row, data):
-        pk = {"Cod_Cientifico": row["Cod_Cientifico"],
-              "Id_Asteroide": row["Id_Asteroide"],
-              "Fecha_Hora": row["Fecha_Hora"]}
+        pk = {
+            "Cod_Cientifico": row["Cod_Cientifico"],
+            "Id_Asteroide": row["Id_Asteroide"],
+            "Fecha_Hora": row["Fecha_Hora"],
+        }
         observaciones.update_observacion(self.db, pk, self._payload(data))
 
     def do_delete(self, row):
-        pk = {"Cod_Cientifico": row["Cod_Cientifico"],
-              "Id_Asteroide": row["Id_Asteroide"],
-              "Fecha_Hora": row["Fecha_Hora"]}
+        pk = {
+            "Cod_Cientifico": row["Cod_Cientifico"],
+            "Id_Asteroide": row["Id_Asteroide"],
+            "Fecha_Hora": row["Fecha_Hora"],
+        }
         observaciones.delete_observacion(self.db, pk)

@@ -54,8 +54,9 @@ class DBConnection:
         try:
             return pyodbc.connect(self._conn_str, timeout=5)
         except pyodbc.Error as exc:
-            raise DBError(f"No fue posible conectar al nodo "
-                          f"{self.cfg['short']}:\n{exc}") from exc
+            raise DBError(
+                f"No fue posible conectar al nodo " f"{self.cfg['short']}:\n{exc}"
+            ) from exc
 
     def test_connection(self):
         """Prueba rápida de conectividad (usada por la pantalla de Login)."""
@@ -86,6 +87,9 @@ class DBConnection:
         conn = self.get_connection()
         try:
             cur = conn.cursor()
+            # 1. Habilitar XACT_ABORT para transacciones distribuidas en esta sesión
+            cur.execute("SET XACT_ABORT ON;")
+
             cur.execute(sql, params)
             affected = cur.rowcount
             conn.commit()
@@ -106,6 +110,10 @@ class DBConnection:
         try:
             conn.autocommit = False
             cur = conn.cursor()
+
+            # 1. Habilitar XACT_ABORT para la transacción distribuida
+            cur.execute("SET XACT_ABORT ON;")
+
             total = 0
             for sql, params in statements:
                 cur.execute(sql, params)
