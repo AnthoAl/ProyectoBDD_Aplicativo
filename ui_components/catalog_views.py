@@ -375,27 +375,31 @@ class ParticipacionesView(BaseCrudView):
     entity_name = "participación"
 
     COLUMNS = [
-        {"key": "cod", "title": "CÓD. CIENTÍFICO", "weight": 2, "anchor": "center"},
+        {"key": "cod", "title": "CÓD.", "weight": 1, "anchor": "center"},
         {"key": "nomc", "title": "CIENTÍFICO", "weight": 4, "anchor": "w"},
-        {"key": "idp", "title": "ID PROGRAMA", "weight": 2, "anchor": "center"},
-        {"key": "mis", "title": "MISIÓN", "weight": 4, "anchor": "w"},
+        {"key": "idp", "title": "ID PROG.", "weight": 1, "anchor": "center"},
+        {"key": "ini", "title": "INICIO", "weight": 3, "anchor": "center"},
         {"key": "obs", "title": "ID OBS.", "weight": 1, "anchor": "center"},
+        {"key": "fin", "title": "FIN", "weight": 3, "anchor": "center"},
+        {"key": "mis", "title": "ROL", "weight": 4, "anchor": "w"},
     ]
 
     def __init__(self, master, db):
         self._cient_map = {}
-        self._prog_map = {}
+        # self._prog_map = {}
         super().__init__(master, db, self.COLUMNS, allow_edit=False)
 
     def fetch_rows(self):
         self._cient_map = {
-            f"{c['Cod_Cientifico']} — {c['Nombre']}": c["Cod_Cientifico"]
+            f"{c['Cod_Cientifico']} — {c['Primer_Nombre']} {c['Primer_Apellido']}": c[
+                "Cod_Cientifico"
+            ]
             for c in cientificos.get_cientificos(self.db)
         }
-        self._prog_map = {
-            f"{p['Id_Programa']} — {p['Nombre_Mision']}": p["Id_Programa"]
-            for p in programas.get_programas(self.db)
-        }
+        # self._prog_map = {
+        #     f"{p['Id_Programa']} — {p['Nombre_Mision']}": p["Id_Programa"]
+        #     for p in programas.get_programas(self.db)
+        # }
         return cientificos.get_participaciones(self.db)
 
     def format_row(self, row, index):
@@ -403,8 +407,12 @@ class ParticipacionesView(BaseCrudView):
             row["Cod_Cientifico"],
             row.get("Cientifico") or "",
             row["Id_Programa"],
-            row.get("Nombre_Mision") or "",
+            str(row.get("Fecha_Inicio", ""))[
+                :10
+            ],  # Cortamos la fecha para que se vea YYYY-MM-DD
             row["Id_Observatorio"],
+            str(row.get("Fecha_Fin", ""))[:10],
+            row["Rol_En_Mision"],
         )
 
     def build_fields(self, row=None):
@@ -421,7 +429,34 @@ class ParticipacionesView(BaseCrudView):
                 "label": "Programa",
                 "widget": "dropdown",
                 "mono": True,
-                "values": list(self._prog_map) or ["—"],
+            },
+            {
+                "key": "Fecha_Inicio",
+                "label": "Fecha de Inicio (YYYY-MM-DD)",
+                "widget": "entry",
+                "mono": True,
+                "placeholder": "Ej. 2026-07-15",
+            },
+            {
+                "key": "Id_Observatorio",
+                "label": "ID Observatorio",
+                "widget": "entry",
+                "mono": True,
+                "placeholder": "Ej. 1",
+            },
+            {
+                "key": "Fecha_Fin",
+                "label": "Fecha de Fin (YYYY-MM-DD)",
+                "widget": "entry",
+                "mono": True,
+                "placeholder": "Ej. 2026-07-15",
+            },
+            {
+                "key": "Rol_En_Mision",
+                "label": "Rol en la Misión",
+                "widget": "entry",
+                "mono": True,
+                "placeholder": "Ej. Investigador",
             },
         ]
 
@@ -435,6 +470,10 @@ class ParticipacionesView(BaseCrudView):
                 "Id_Programa": self._prog_map.get(
                     data["Id_Programa"], data["Id_Programa"]
                 ),
+                "Fecha_Inicio": data["Fecha_Inicio"],
+                "Id_Observatorio": data["Id_Observatorio"],
+                "Fecha_Fin": data["Fecha_Fin"],
+                "Rol_En_Mision": data["Rol_En_Mision"],
             },
         )
 
@@ -443,5 +482,5 @@ class ParticipacionesView(BaseCrudView):
 
     def do_delete(self, row):
         cientificos.delete_participacion(
-            self.db, row["Cod_Cientifico"], row["Id_Programa"]
+            self.db, row["Cod_Cientifico"], row["Id_Programa"], row["Fecha_Inicio"]
         )
