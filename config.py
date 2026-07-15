@@ -47,5 +47,12 @@ NODES = {
     },
 }
 
-# Dominios válidos para la extensión vertical del Nodo 2
-TIPOS_ESPECTRALES = ["C", "S", "M", "Sq", "B", "Sk"]
+# Dominios válidos para la extensión vertical del Nodo 2 (Con su significado)
+TIPOS_ESPECTRALES = {
+    "C": "Carbonáceo (Oscuro)",
+    "S": "Silicáceo (Rocoso)",
+    "M": "Metálico (Níquel-Hierro)",
+    "Sq": "Transición S-Q",
+    "B": "Primitivo (Rico en volátiles)",
+    "Sk": "Transición S-K",
+}
