@@ -98,7 +98,7 @@ class ObservationsSpain(BaseCrudView):
                 {
                     "key": "Fecha_Hora",
                     "label": "Fecha / Hora UTC (PK)",
-                    "widget": "datetime",
+                    "widget": "entry",
                     "mono": True,
                     "readonly": True,
                     "default": str(row["Fecha_Hora"])[:16],
@@ -124,13 +124,22 @@ class ObservationsSpain(BaseCrudView):
                     "key": "Fecha_Hora",
                     "label": "Fecha / Hora UTC",
                     "widget": "datetime",
-                    "mono": True,
+                    "mono": True,  # <-- Usando el datetime que creamos
+                    "placeholder": "YYYY-MM-DD HH:MM",
                 },
             ]
 
+        # 1. Construimos las opciones visuales (Ej: "C — Carbonáceo (Oscuro)")
+        opciones_espectrales = [SIN_ESPECTRO] + [
+            f"{sigla} — {desc}" for sigla, desc in TIPOS_ESPECTRALES.items()
+        ]
+
         spec_default = SIN_ESPECTRO
         if editing and row.get("Tipo_Espectral"):
-            spec_default = row["Tipo_Espectral"]
+            sigla_db = row["Tipo_Espectral"]
+            # 2. Reconstruimos el string visual para pre-seleccionar el dropdown al Modificar
+            desc_db = TIPOS_ESPECTRALES.get(sigla_db, "")
+            spec_default = f"{sigla_db} — {desc_db}" if desc_db else sigla_db
 
         fields += [
             {
@@ -160,7 +169,7 @@ class ObservationsSpain(BaseCrudView):
                 "label": "Tipo espectral",
                 "widget": "dropdown",
                 "mono": True,
-                "values": [SIN_ESPECTRO] + TIPOS_ESPECTRALES,
+                "values": opciones_espectrales,
                 "default": spec_default,
             },
         ]
@@ -168,14 +177,19 @@ class ObservationsSpain(BaseCrudView):
 
     # ---------------------- Escrituras ---------------------- #
     def _payload(self, data):
-        tipo = data.get("Tipo_Espectral")
-        if tipo == SIN_ESPECTRO:
-            tipo = None
+        tipo_ui = data.get("Tipo_Espectral")
+
+        # 3. Al guardar, extraemos únicamente la sigla aislando lo que está antes del " — "
+        if tipo_ui == SIN_ESPECTRO or not tipo_ui:
+            tipo_db = None
+        else:
+            tipo_db = tipo_ui.split(" — ")[0]
+
         return {
             "Magnitud_Aparente": float(data["Magnitud_Aparente"]),
             "Distancia_Relativa": float(data["Distancia_Relativa"]),
             "Velocidad": float(data["Velocidad"]),
-            "Tipo_Espectral": tipo,
+            "Tipo_Espectral": tipo_db,
         }
 
     def do_insert(self, data):
