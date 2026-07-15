@@ -22,7 +22,7 @@ class AsteroidesView(BaseCrudView):
         {"key": "id", "title": "ID", "weight": 1, "anchor": "center"},
         {"key": "nom", "title": "NOMBRE", "weight": 4, "anchor": "center"},
         {"key": "des", "title": "DESIGNACIÓN", "weight": 3, "anchor": "center"},
-        {"key": "diam", "title": "DIÁMETRO EST. (m)", "weight": 3, "anchor": "center"},
+        {"key": "diam", "title": "DIÁMETRO EST. (km)", "weight": 3, "anchor": "center"},
         {"key": "pelig", "title": "⚠ PELIGROSO", "weight": 2, "anchor": "center"},
     ]
 
@@ -81,7 +81,7 @@ class AsteroidesView(BaseCrudView):
             },
             {
                 "key": "Diametro_Estimado",
-                "label": "Diámetro estimado (m)",
+                "label": "Diámetro estimado (km)",
                 "widget": "entry",
                 "mono": True,
                 "default": row["Diametro_Estimado"] if e else "",
@@ -222,8 +222,13 @@ class ObservatoriosView(BaseCrudView):
     COLUMNS = [
         {"key": "id", "title": "ID", "weight": 1, "anchor": "center"},
         {"key": "nom", "title": "NOMBRE", "weight": 5, "anchor": "w"},
-        {"key": "alt", "title": "ALTITUD (m)", "weight": 2, "anchor": "center"},
-        {"key": "coord", "title": "COORDENADAS", "weight": 4, "anchor": "center"},
+        {"key": "alt", "title": "ALTITUD (msnm)", "weight": 2, "anchor": "center"},
+        {
+            "key": "coord",
+            "title": "COORDENADAS (lat/lon)",
+            "weight": 4,
+            "anchor": "center",
+        },
         {"key": "cap", "title": "RESOLUCIÓN", "weight": 3, "anchor": "center"},
     ]
 
@@ -269,14 +274,14 @@ class ObservatoriosView(BaseCrudView):
             },
             {
                 "key": "Altitud",
-                "label": "Altitud (m)",
+                "label": "Altitud (msnm)",
                 "widget": "entry",
                 "mono": True,
                 "default": row["Altitud"] if e else "",
             },
             {
                 "key": "Coordenadas",
-                "label": "Coordenadas",
+                "label": "COORDENADAS (lat/lon)",
                 "widget": "entry",
                 "default": row["Coordenadas"] if e else "",
             },
@@ -403,7 +408,7 @@ class ParticipacionesView(BaseCrudView):
         {"key": "nomc", "title": "CIENTÍFICO", "weight": 4, "anchor": "w"},
         {"key": "idp", "title": "ID PROG.", "weight": 1, "anchor": "center"},
         {"key": "ini", "title": "INICIO", "weight": 3, "anchor": "center"},
-        {"key": "obs", "title": "ID OBS.", "weight": 1, "anchor": "center"},
+        # {"key": "obs", "title": "ID OBS.", "weight": 1, "anchor": "center"},
         {"key": "fin", "title": "FIN", "weight": 3, "anchor": "center"},
         {"key": "mis", "title": "ROL", "weight": 4, "anchor": "w"},
     ]
@@ -434,7 +439,7 @@ class ParticipacionesView(BaseCrudView):
             str(row.get("Fecha_Inicio", ""))[
                 :10
             ],  # Cortamos la fecha para que se vea YYYY-MM-DD
-            row["Id_Observatorio"],
+            # row["Id_Observatorio"],
             str(row.get("Fecha_Fin", ""))[:10],
             row["Rol_En_Mision"],
         )
@@ -461,13 +466,13 @@ class ParticipacionesView(BaseCrudView):
                 "mono": True,
                 "placeholder": "Ej. 2026-07-15",
             },
-            {
-                "key": "Id_Observatorio",
-                "label": "ID Observatorio",
-                "widget": "entry",
-                "mono": True,
-                "placeholder": "Ej. 1",
-            },
+            # {
+            #     "key": "Id_Observatorio",
+            #     "label": "ID Observatorio",
+            #     "widget": "entry",
+            #     "mono": True,
+            #     "placeholder": "Ej. 1",
+            # },
             {
                 "key": "Fecha_Fin",
                 "label": "Fecha de Fin (YYYY-MM-DD)",
@@ -495,7 +500,7 @@ class ParticipacionesView(BaseCrudView):
                     data["Id_Programa"], data["Id_Programa"]
                 ),
                 "Fecha_Inicio": data["Fecha_Inicio"],
-                "Id_Observatorio": data["Id_Observatorio"],
+                # "Id_Observatorio": data["Id_Observatorio"],
                 "Fecha_Fin": data["Fecha_Fin"],
                 "Rol_En_Mision": data["Rol_En_Mision"],
             },

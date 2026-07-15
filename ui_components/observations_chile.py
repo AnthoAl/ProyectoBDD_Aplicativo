@@ -19,9 +19,9 @@ COLUMNS = [
     {"key": "cient", "title": "CIENTÍFICO", "weight": 4, "anchor": "w"},
     {"key": "aster", "title": "ASTEROIDE", "weight": 4, "anchor": "w"},
     {"key": "fecha", "title": "FECHA UTC", "weight": 4, "anchor": "center"},
-    {"key": "mag", "title": "MAG. APARENTE", "weight": 3, "anchor": "center"},
-    {"key": "dist", "title": "DISTANCIA REL.", "weight": 3, "anchor": "center"},
-    {"key": "vel", "title": "VELOCIDAD", "weight": 3, "anchor": "center"},
+    {"key": "mag", "title": "MAG. APARENTE (Brillo)", "weight": 3, "anchor": "center"},
+    {"key": "dist", "title": "DISTANCIA REL. (UA)", "weight": 3, "anchor": "center"},
+    {"key": "vel", "title": "VELOCIDAD (km/s)", "weight": 3, "anchor": "center"},
 ]
 
 
@@ -87,7 +87,7 @@ class ObservationsChile(BaseCrudView):
                 {
                     "key": "Fecha_Hora",
                     "label": "Fecha / Hora UTC (PK)",
-                    "widget": "entry",
+                    "widget": "datetime",
                     "mono": True,
                     "readonly": True,
                     "default": str(row["Fecha_Hora"])[:16],
@@ -112,9 +112,8 @@ class ObservationsChile(BaseCrudView):
                 {
                     "key": "Fecha_Hora",
                     "label": "Fecha / Hora UTC",
-                    "widget": "entry",
+                    "widget": "datetime",
                     "mono": True,
-                    "placeholder": "YYYY-MM-DD HH:MM",
                 },
             ]
 
