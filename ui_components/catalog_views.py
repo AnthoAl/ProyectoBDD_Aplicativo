@@ -415,8 +415,8 @@ class ParticipacionesView(BaseCrudView):
 
     def __init__(self, master, db):
         self._cient_map = {}
-        # self._prog_map = {}
-        super().__init__(master, db, self.COLUMNS, allow_edit=False)
+        self._prog_map = {}
+        super().__init__(master, db, self.COLUMNS, allow_edit=True)
 
     def fetch_rows(self):
         self._cient_map = {
@@ -425,10 +425,10 @@ class ParticipacionesView(BaseCrudView):
             ]
             for c in cientificos.get_cientificos(self.db)
         }
-        # self._prog_map = {
-        #     f"{p['Id_Programa']} — {p['Nombre_Mision']}": p["Id_Programa"]
-        #     for p in programas.get_programas(self.db)
-        # }
+        self._prog_map = {
+            f"{p['Id_Programa']} — {p['Nombre_Mision']}": p["Id_Programa"]
+            for p in programas.get_programas(self.db)
+        }
         return cientificos.get_participaciones(self.db)
 
     def format_row(self, row, index):
@@ -445,49 +445,89 @@ class ParticipacionesView(BaseCrudView):
         )
 
     def build_fields(self, row=None):
-        return [
-            {
-                "key": "Cod_Cientifico",
-                "label": "Científico",
-                "widget": "dropdown",
-                "mono": True,
-                "values": list(self._cient_map) or ["—"],
-            },
-            {
-                "key": "Id_Programa",
-                "label": "Programa",
-                "widget": "dropdown",
-                "mono": True,
-            },
-            {
-                "key": "Fecha_Inicio",
-                "label": "Fecha de Inicio (YYYY-MM-DD)",
-                "widget": "entry",
-                "mono": True,
-                "placeholder": "Ej. 2026-07-15",
-            },
-            # {
-            #     "key": "Id_Observatorio",
-            #     "label": "ID Observatorio",
-            #     "widget": "entry",
-            #     "mono": True,
-            #     "placeholder": "Ej. 1",
-            # },
+        editing = row is not None
+
+        cient_opts = list(self._cient_map.keys()) or ["—"]
+        prog_opts = list(self._prog_map.keys()) or ["—"]
+
+        if editing:
+            # Si estamos editando, las llaves primarias se vuelven cajas de texto bloqueadas
+            fields = [
+                {
+                    "key": "Cod_Cientifico",
+                    "label": "Científico (PK)",
+                    "widget": "entry",
+                    "mono": True,
+                    "readonly": True,
+                    "default": row["Cod_Cientifico"],
+                },
+                {
+                    "key": "Id_Programa",
+                    "label": "Id Programa (PK)",
+                    "widget": "entry",
+                    "mono": True,
+                    "readonly": True,
+                    "default": row["Id_Programa"],
+                },
+                {
+                    "key": "Fecha_Inicio",
+                    "label": "Fecha de Inicio (PK)",
+                    "widget": "entry",
+                    "mono": True,
+                    "readonly": True,
+                    "default": str(row.get("Fecha_Inicio", ""))[:10],
+                },
+            ]
+        else:
+            # Si es un nuevo registro, mostramos los dropdowns y el calendario
+            fields = [
+                {
+                    "key": "Cod_Cientifico",
+                    "label": "Científico",
+                    "widget": "dropdown",
+                    "mono": True,
+                    "values": cient_opts,
+                },
+                {
+                    "key": "Id_Programa",
+                    "label": "Programa",
+                    "widget": "dropdown",
+                    "mono": True,
+                    "values": prog_opts,
+                },
+                {
+                    "key": "Fecha_Inicio",
+                    "label": "Fecha de Inicio",
+                    "widget": "date",
+                    "mono": True,
+                },
+            ]
+
+        # Campos comunes que SIEMPRE se pueden editar
+        fields += [
             {
                 "key": "Fecha_Fin",
-                "label": "Fecha de Fin (YYYY-MM-DD)",
-                "widget": "entry",
+                "label": "Fecha de Fin (Opcional)",
+                "widget": "date",
                 "mono": True,
-                "placeholder": "Ej. 2026-07-15",
+                "required": False,
+                "default": (
+                    str(row.get("Fecha_Fin", ""))[:10]
+                    if editing and row.get("Fecha_Fin")
+                    else ""
+                ),
             },
             {
                 "key": "Rol_En_Mision",
-                "label": "Rol en la Misión",
+                "label": "Rol en la Misión (Opcional)",
                 "widget": "entry",
-                "mono": True,
-                "placeholder": "Ej. Investigador",
+                "mono": False,
+                "required": False,
+                "placeholder": "Ej. Investigador Principal",
+                "default": row.get("Rol_En_Mision", "") if editing else "",
             },
         ]
+        return fields
 
     def do_insert(self, data):
         cientificos.insert_participacion(
@@ -507,7 +547,27 @@ class ParticipacionesView(BaseCrudView):
         )
 
     def do_update(self, row, data):
-        raise NotImplementedError
+        # 1. Extraemos las llaves primarias de la fila original
+        pk = {
+            "Cod_Cientifico": row["Cod_Cientifico"],
+            "Id_Programa": row["Id_Programa"],
+            "Fecha_Inicio": row["Fecha_Inicio"],
+        }
+
+        # 2. Manejamos los campos vacíos para que viajen como NULL a SQL Server
+        payload = {
+            "Fecha_Fin": (
+                data["Fecha_Fin"] if data.get("Fecha_Fin", "").strip() != "" else None
+            ),
+            "Rol_En_Mision": (
+                data["Rol_En_Mision"]
+                if data.get("Rol_En_Mision", "").strip() != ""
+                else None
+            ),
+        }
+
+        # 3. Enviamos a la base de datos
+        cientificos.update_participacion(self.db, pk, payload)
 
     def do_delete(self, row):
         cientificos.delete_participacion(

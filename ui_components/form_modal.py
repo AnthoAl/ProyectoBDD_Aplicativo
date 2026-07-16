@@ -2,12 +2,13 @@
 ui_components/form_modal.py
 ---------------------------
 Formulario modal genérico.
-Se añade el soporte para "datetime" (tkcalendar + hora) y validación de fechas futuras.
+Se corrige el bug de geometría en CTkToplevel forzando el cálculo
+de tamaño (w x h) antes de bloquear la ventana.
 """
 
 from tkinter import messagebox
 from datetime import datetime, timezone
-from tkcalendar import DateEntry  # <-- Importamos el calendario
+from tkcalendar import DateEntry
 import customtkinter as ctk
 
 import theme
@@ -19,7 +20,10 @@ class FormModal(ctk.CTkToplevel):
     ):
         super().__init__(master, fg_color=theme.BG_PANEL)
         self.title(title)
-        self.resizable(False, False)
+
+        # ELIMINAMOS self.resizable(False, False) DE AQUÍ.
+        # Si lo dejamos al inicio, Windows recorta la ventana antes de medir los campos.
+
         self.configure(border_width=1, border_color=theme.BORDER)
 
         self._fields = fields
@@ -48,107 +52,151 @@ class FormModal(ctk.CTkToplevel):
         body.pack(fill="both", expand=True, padx=28, pady=12)
 
         for field in fields:
-            ctk.CTkLabel(
-                body,
-                text=field["label"].upper(),
-                font=theme.mono_font(10, "bold"),
-                text_color=theme.TEXT_SEC,
-            ).pack(anchor="w", pady=(10, 3))
-
-            widget_type = field.get("widget", "entry")
-            font = theme.mono_font(13) if field.get("mono") else theme.ui_font(13)
-
-            # 1. WIDGET DROPDOWN
-            if widget_type == "dropdown":
-                var = ctk.StringVar(value=field.get("default", field["values"][0]))
-                widget = ctk.CTkOptionMenu(
+            try:
+                ctk.CTkLabel(
                     body,
-                    values=field["values"],
-                    variable=var,
-                    width=340,
-                    fg_color=theme.BG_MAIN,
-                    button_color=theme.BORDER,
-                    button_hover_color=theme.ACCENT_DIM,
-                    text_color=theme.TEXT_MAIN,
-                    font=font,
-                )
-                widget.pack(fill="x")
-                self._widgets[field["key"]] = ("dropdown", var, widget)
+                    text=field["label"].upper(),
+                    font=theme.mono_font(10, "bold"),
+                    text_color=theme.TEXT_SEC,
+                ).pack(anchor="w", pady=(10, 3))
 
-            # 2. WIDGET DATETIME (Calendario + Hora)
-            elif widget_type == "datetime":
-                container = ctk.CTkFrame(body, fg_color="transparent")
-                container.pack(fill="x")
+                widget_type = field.get("widget", "entry")
+                font = theme.mono_font(13) if field.get("mono") else theme.ui_font(13)
 
-                # Calendario (Día-Mes-Año)
-                date_widget = DateEntry(
-                    container,
-                    width=15,
-                    background="#080c18",
-                    foreground="white",
-                    borderwidth=0,
-                    headersbackground="#0e1422",
-                    headersforeground="white",
-                    selectbackground="#00c8e8",
-                    selectforeground="black",
-                    date_pattern="yyyy-mm-dd",
-                    font=("Inter", 11),
-                )
-                date_widget.pack(side="left", padx=(0, 10), ipady=5)
+                # 1. WIDGET DROPDOWN
+                if widget_type == "dropdown":
+                    var = ctk.StringVar(value=field.get("default", field["values"][0]))
+                    widget = ctk.CTkOptionMenu(
+                        body,
+                        values=field["values"],
+                        variable=var,
+                        width=340,
+                        fg_color=theme.BG_MAIN,
+                        button_color=theme.BORDER,
+                        button_hover_color=theme.ACCENT_DIM,
+                        text_color=theme.TEXT_MAIN,
+                        font=font,
+                    )
+                    widget.pack(fill="x")
+                    self._widgets[field["key"]] = ("dropdown", var, widget)
 
-                # Caja de texto para la Hora (HH:MM)
-                time_widget = ctk.CTkEntry(
-                    container,
-                    width=80,
-                    height=30,
-                    fg_color=theme.BG_MAIN,
-                    border_color=theme.BORDER,
-                    text_color=theme.TEXT_MAIN,
-                    font=font,
-                    placeholder_text="HH:MM",
-                )
-                time_widget.pack(side="left")
+                # 2. WIDGET DATETIME (Fecha y Hora - Observaciones)
+                elif widget_type == "datetime":
+                    container = ctk.CTkFrame(body, fg_color="transparent")
+                    container.pack(fill="x")
 
-                # Valores por defecto en caso de "MODIFICAR"
-                default = field.get("default")
-                if default:
-                    try:
-                        dt_val = datetime.strptime(str(default)[:16], "%Y-%m-%d %H:%M")
-                        date_widget.set_date(dt_val.date())
-                        time_widget.insert(0, dt_val.strftime("%H:%M"))
-                    except ValueError:
-                        pass
+                    date_widget = DateEntry(
+                        container,
+                        width=15,
+                        background="#080c18",
+                        foreground="white",
+                        borderwidth=0,
+                        headersbackground="#0e1422",
+                        headersforeground="white",
+                        selectbackground="#00c8e8",
+                        selectforeground="black",
+                        date_pattern="yyyy-mm-dd",
+                        font=("Inter", 11),
+                    )
+                    date_widget.pack(side="left", padx=(0, 10), ipady=5)
 
-                if field.get("readonly"):
-                    date_widget.configure(state="disabled")
-                    time_widget.configure(state="disabled", text_color=theme.TEXT_SEC)
+                    time_widget = ctk.CTkEntry(
+                        container,
+                        width=80,
+                        height=30,
+                        fg_color=theme.BG_MAIN,
+                        border_color=theme.BORDER,
+                        text_color=theme.TEXT_MAIN,
+                        font=font,
+                        placeholder_text="HH:MM",
+                    )
+                    time_widget.pack(side="left")
 
-                self._widgets[field["key"]] = (
-                    "datetime",
-                    None,
-                    (date_widget, time_widget),
-                )
+                    default = field.get("default")
+                    if default:
+                        try:
+                            dt_val = datetime.strptime(
+                                str(default)[:16], "%Y-%m-%d %H:%M"
+                            )
+                            date_widget.set_date(dt_val.date())
+                            time_widget.insert(0, dt_val.strftime("%H:%M"))
+                        except ValueError:
+                            pass
 
-            # 3. WIDGET ENTRY CLÁSICO
-            else:
-                widget = ctk.CTkEntry(
+                    if field.get("readonly"):
+                        date_widget.configure(state="disabled")
+                        time_widget.configure(
+                            state="disabled", text_color=theme.TEXT_SEC
+                        )
+
+                    self._widgets[field["key"]] = (
+                        "datetime",
+                        None,
+                        (date_widget, time_widget),
+                    )
+
+                # 3. WIDGET DATE (Solo Calendario - Participaciones)
+                elif widget_type == "date":
+                    container = ctk.CTkFrame(body, fg_color="transparent")
+                    container.pack(fill="x")
+
+                    date_widget = DateEntry(
+                        container,
+                        width=15,
+                        background="#080c18",
+                        foreground="white",
+                        borderwidth=0,
+                        headersbackground="#0e1422",
+                        headersforeground="white",
+                        selectbackground="#00c8e8",
+                        selectforeground="black",
+                        date_pattern="yyyy-mm-dd",
+                        font=("Inter", 12),
+                    )
+                    date_widget.pack(side="left", ipady=5)
+
+                    default = field.get("default")
+                    if default and str(default).strip() != "" and str(default) != "—":
+                        try:
+                            dt_val = datetime.strptime(str(default)[:10], "%Y-%m-%d")
+                            date_widget.set_date(dt_val.date())
+                        except ValueError:
+                            pass
+
+                    if field.get("readonly"):
+                        date_widget.configure(state="disabled")
+
+                    self._widgets[field["key"]] = ("date", None, date_widget)
+
+                # 4. WIDGET ENTRY CLÁSICO
+                else:
+                    widget = ctk.CTkEntry(
+                        body,
+                        width=340,
+                        height=36,
+                        fg_color=theme.BG_MAIN,
+                        border_color=theme.BORDER,
+                        border_width=1,
+                        text_color=theme.TEXT_MAIN,
+                        font=font,
+                        placeholder_text=field.get("placeholder", ""),
+                    )
+                    default = field.get("default")
+                    if default is not None and default != "":
+                        widget.insert(0, str(default))
+                    if field.get("readonly"):
+                        widget.configure(state="disabled", text_color=theme.TEXT_SEC)
+                    widget.pack(fill="x")
+                    self._widgets[field["key"]] = ("entry", None, widget)
+
+            except Exception as e:
+                # Defensa estructural: Si algo falla, avisa pero permite cargar los botones
+                print(f"Error cargando el campo '{field.get('key')}': {str(e)}")
+                ctk.CTkLabel(
                     body,
-                    width=340,
-                    height=36,
-                    fg_color=theme.BG_MAIN,
-                    border_color=theme.BORDER,
-                    border_width=1,
-                    text_color=theme.TEXT_MAIN,
-                    font=font,
-                    placeholder_text=field.get("placeholder", ""),
-                )
-                default = field.get("default")
-                if default is not None and default != "":
-                    widget.insert(0, str(default))
-                if field.get("readonly"):
-                    widget.configure(state="disabled", text_color=theme.TEXT_SEC)
-                widget.pack(fill="x")
-                self._widgets[field["key"]] = ("entry", None, widget)
+                    text=f"⚠ Fallo al cargar: {field.get('label')}",
+                    text_color="#e8506a",
+                ).pack(anchor="w")
 
         # ---------- Botonera ----------
         footer = ctk.CTkFrame(self, fg_color="transparent")
@@ -181,19 +229,34 @@ class FormModal(ctk.CTkToplevel):
         ).pack(side="right")
 
         self.transient(master)
-        self.update_idletasks()
+
+        # 1. Centramos la ventana SOLO usando coordenadas X e Y
         self._center_on(master)
+
+        # 2. EL TRUCO DEFINITIVO: Le damos 150 milisegundos a Windows para que
+        # termine de empaquetar y dibujar todos los campos (especialmente el calendario)
+        # antes de congelar el tamaño de la ventana.
+        self.after(150, lambda: self.resizable(False, False))
+
         self.grab_set()
         self.focus_force()
         self.bind("<Escape>", lambda _e: self.destroy())
 
+    # ------------------------------------------------------------ #
     def _center_on(self, master):
         self.update_idletasks()
-        w, h = self.winfo_reqwidth(), self.winfo_reqheight()
+
+        # Obtenemos un ancho y alto estimado solo para calcular el centro matemático
+        w = self.winfo_reqwidth()
+        h = self.winfo_reqheight()
+
         mx, my = master.winfo_rootx(), master.winfo_rooty()
         mw, mh = master.winfo_width(), master.winfo_height()
         x = mx + (mw - w) // 2
         y = my + (mh - h) // 2
+
+        # OMITIMOS forzar el tamaño. Solo le decimos "ubícate aquí (+X+Y)".
+        # Esto permite que el formulario se expanda naturalmente hacia abajo.
         self.geometry(f"+{max(x, 0)}+{max(y, 0)}")
 
     # ------------------------------------------------------------ #
@@ -226,6 +289,9 @@ class FormModal(ctk.CTkToplevel):
                     raise ValueError(
                         f"Formato de hora inválido en '{field['label']}'. Usa HH:MM."
                     )
+
+            elif kind == "date":
+                value = widget.get()
             else:
                 value = widget.get().strip()
 

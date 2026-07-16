@@ -126,6 +126,29 @@ def insert_participacion(db, data):
     )
 
 
+def update_participacion(db, pk, data):
+    """
+    Actualiza exclusivamente los campos no primarios.
+    Se envía a VistaGlobalParticipaciones para mantener la transparencia
+    de fragmentación.
+    """
+    sql = """
+        UPDATE VistaGlobalParticipaciones
+        SET Fecha_Fin = ?, Rol_En_Mision = ?
+        WHERE Cod_Cientifico = ? AND Id_Programa = ? AND Fecha_Inicio = ?
+    """
+    return db.execute(
+        sql,
+        (
+            data["Fecha_Fin"],
+            data["Rol_En_Mision"],
+            pk["Cod_Cientifico"],
+            pk["Id_Programa"],
+            pk["Fecha_Inicio"],
+        ),
+    )
+
+
 def delete_participacion(db, cod_cientifico, id_programa, fecha_inicio):
     sql = """
         DELETE FROM VistaGlobalParticipaciones 
