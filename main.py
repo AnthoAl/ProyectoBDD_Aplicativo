@@ -4,7 +4,10 @@ main.py
 Orquestador principal de la aplicación.
 
 Flujo:
-    1. LoginView  -> el usuario elige sede ("chile" | "espana").
+    Flujo:
+    1. LoginView  -> el usuario ingresa usuario/clave; la sede
+       ("chile" | "espana") se determina automáticamente según qué
+       credencial (quemada en config.NODES) coincide.
     2. Se instancia DBConnection ligada al nodo.
     3. Se levanta la shell principal (Sidebar + Topbar + área de contenido).
     4. El ruteo de vistas se resuelve con if/elif/else (SIN match-case):

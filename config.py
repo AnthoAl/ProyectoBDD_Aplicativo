@@ -30,6 +30,8 @@ NODES = {
         "tabla_participacion": "Participacion_001",
         "tabla_observacion": "Datos_Observacion_001",
         "tiene_espectral": False,
+        "login_usuario": "operador.chile",  # <-- Credencial de acceso a la app
+        "login_clave": "Chile#2026",
     },
     "espana": {
         "label": "NODO 2 · ESPAÑA — Roque de los Muchachos",
@@ -44,6 +46,8 @@ NODES = {
         "tabla_participacion": "Participacion_002",
         "tabla_observacion": "Datos_Observacion_002",
         "tiene_espectral": True,  # Extensión vertical Datos_Espectral
+        "login_usuario": "operador.espana",  # <-- Credencial de acceso a la app
+        "login_clave": "Espana#2026",
     },
 }
 
