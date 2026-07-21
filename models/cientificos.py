@@ -20,25 +20,36 @@ solo en este archivo (la UI las toma desde aquí).
 # --------------------------------------------------------------------- #
 # CIENTÍFICOS
 # --------------------------------------------------------------------- #
-def get_cientificos(db):
-    """Lectura vía vista particionada global, filtrada por el nodo local."""
-    sql = """
+def get_cientificos(db, filtro="propio"):
+    """
+    Lectura vía vista particionada global.
+
+    filtro:
+        "chile"  -> solo Nodo 1 · Chile   (Id_Observatorio = 1)
+        "espana" -> solo Nodo 2 · España  (Id_Observatorio = 2)
+        "ambas"  -> ambos nodos, sin filtro (federados por la vista global)
+        "propio" -> el nodo local conectado (usado internamente por los
+                    dropdowns de otras vistas, que solo pueden referenciar
+                    científicos de su propio nodo al escribir)
+    """
+    if filtro == "chile":
+        where_clause, params = "WHERE Id_Observatorio = 1", ()
+    elif filtro == "espana":
+        where_clause, params = "WHERE Id_Observatorio = 2", ()
+    elif filtro == "ambas":
+        where_clause, params = "", ()
+    elif filtro == "propio":
+        where_clause, params = "WHERE Id_Observatorio = ?", (db.cfg["id_observatorio"],)
+    else:
+        raise ValueError(f"Filtro de sede no soportado: {filtro!r}")
+
+    sql = f"""
         SELECT Cod_Cientifico, Primer_Nombre, Primer_Apellido, Especialidad, Nacionalidad, Id_Observatorio
         FROM VistaGlobalCientificos
-        WHERE Id_Observatorio = ?
-        ORDER BY Cod_Cientifico
+        {where_clause}
+        ORDER BY Id_Observatorio, Cod_Cientifico
     """
-    return db.fetch_all(sql, (db.cfg["id_observatorio"],))
-
-
-# def get_cientificos_global(db):
-#     """Lectura de TODOS los científicos de la federación (ambos nodos)."""
-#     sql = """
-#         SELECT Cod_Cientifico, Primer_Nombre, Primer_Apellido, Especialidad, Nacionalidad, Id_Observatorio
-#         FROM VistaGlobalCientificos
-#         ORDER BY Id_Observatorio, Cod_Cientifico
-#     """
-#     return db.fetch_all(sql)
+    return db.fetch_all(sql, params)
 
 
 def insert_cientifico(db, data):
@@ -89,9 +100,24 @@ def delete_cientifico(db, cod_cientifico):
 # --------------------------------------------------------------------- #
 # PARTICIPACIONES
 # --------------------------------------------------------------------- #
-def get_participaciones(db):
-    """Lectura vía vista particionada global, filtrada por el nodo local."""
-    sql = """
+def get_participaciones(db, filtro="propio"):
+    """
+    Lectura vía vista particionada global.
+
+    filtro: "chile" | "espana" | "ambas" | "propio" (ver get_cientificos).
+    """
+    if filtro == "chile":
+        where_clause, params = "WHERE P.Id_Observatorio = 1", ()
+    elif filtro == "espana":
+        where_clause, params = "WHERE P.Id_Observatorio = 2", ()
+    elif filtro == "ambas":
+        where_clause, params = "", ()
+    elif filtro == "propio":
+        where_clause, params = "WHERE P.Id_Observatorio = ?", (db.cfg["id_observatorio"],)
+    else:
+        raise ValueError(f"Filtro de sede no soportado: {filtro!r}")
+
+    sql = f"""
         SELECT P.Cod_Cientifico, P.Id_Programa, P.Fecha_Inicio, P.Id_Observatorio,
                P.Rol_En_Mision,  -- <-- COLUMNA AGREGADA PARA EVITAR EL KEYERROR
                P.Fecha_Fin,      -- <-- Agregada por si también la incluyes en la UI
@@ -102,10 +128,10 @@ def get_participaciones(db):
                ON C.Cod_Cientifico = P.Cod_Cientifico
               AND C.Id_Observatorio = P.Id_Observatorio
         LEFT JOIN Programa PR ON PR.Id_Programa = P.Id_Programa
-        WHERE P.Id_Observatorio = ?
-        ORDER BY P.Cod_Cientifico, P.Id_Programa, P.Fecha_Inicio
+        {where_clause}
+        ORDER BY P.Id_Observatorio, P.Cod_Cientifico, P.Id_Programa, P.Fecha_Inicio
     """
-    return db.fetch_all(sql, (db.cfg["id_observatorio"],))
+    return db.fetch_all(sql, params)
 
 
 def insert_participacion(db, data):

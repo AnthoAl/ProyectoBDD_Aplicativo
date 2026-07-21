@@ -8,9 +8,11 @@ Fragmentos horizontales:
                        Id_Observatorio, Tipo_Espectral]
 
 Lecturas:
-    - VistaGlobalObservaciones filtrada por la condición de fragmentación
-      horizontal primaria: WHERE Id_Observatorio = 1 (Chile) o = 2 (España).
-    - España añade LEFT JOIN a Datos_Espectral (fragmentación vertical).
+    - VistaGlobalObservaciones, con LEFT JOIN permanente a Datos_Espectral
+      (fragmentación vertical), filtrable por sede vía el parámetro
+      `filtro` de get_observaciones(): "chile" (Id_Observatorio = 1),
+      "espana" (Id_Observatorio = 2) o "ambas" (sin filtro, federando
+      los dos nodos gracias a la transparencia de la vista particionada).
 
 Escrituras:
     - Chile  : INSERT/UPDATE/DELETE directo sobre Datos_Observacion_001.
@@ -27,61 +29,47 @@ DATE_FMT_HINT = "YYYY-MM-DD HH:MM"
 # --------------------------------------------------------------------- #
 # READ
 # --------------------------------------------------------------------- #
-def get_observaciones(db):
-    if db.sede == "chile":
-        # Nodo 1 — columnas básicas, sin dominio espectral.
-        sql = """
-            SELECT O.Cod_Cientifico,
-                   O.Id_Asteroide,
-                   C.Primer_Nombre + ' ' + C.Primer_Apellido AS Cientifico,
-                   A.Nombre  AS Asteroide,
-                   O.Fecha_Hora,
-                   O.Id_Observatorio,
-                   O.Magnitud_Aparente,
-                   O.Distancia_Relativa,
-                   O.Velocidad_Aproximada AS Velocidad -- Alias para mantener compatibilidad con la UI
-            FROM VistaGlobalObservaciones O
-            LEFT JOIN VistaGlobalCientificos C
-                   ON C.Cod_Cientifico = O.Cod_Cientifico
-                  AND C.Id_Observatorio = O.Id_Observatorio
-            LEFT JOIN Asteroide A ON A.Id_Asteroide = O.Id_Asteroide
-            WHERE O.Id_Observatorio = 1
-            ORDER BY O.Fecha_Hora DESC
-        """
-        return db.fetch_all(sql)
-
-    elif db.sede == "espana":
-        # Nodo 2 — se anexa la extensión vertical Datos_Espectral.
-        sql = """
-            SELECT O.Cod_Cientifico,
-                   O.Id_Asteroide,
-                   C.Primer_Nombre + ' ' + C.Primer_Apellido AS Cientifico,
-                   A.Nombre  AS Asteroide,
-                   O.Fecha_Hora,
-                   O.Id_Observatorio,
-                   O.Magnitud_Aparente,
-                   O.Distancia_Relativa,
-                   O.Velocidad_Aproximada AS Velocidad, -- Alias para la UI
-                   E.Tipo_Espectral
-            FROM VistaGlobalObservaciones O
-            LEFT JOIN VistaGlobalCientificos C
-                   ON C.Cod_Cientifico = O.Cod_Cientifico
-                  AND C.Id_Observatorio = O.Id_Observatorio
-            LEFT JOIN Asteroide A ON A.Id_Asteroide = O.Id_Asteroide
-            LEFT JOIN Datos_Espectral E
-                   ON E.Cod_Cientifico  = O.Cod_Cientifico
-                  AND E.Id_Asteroide    = O.Id_Asteroide
-                  AND E.Fecha_Hora      = O.Fecha_Hora
-                  AND E.Id_Observatorio = O.Id_Observatorio
-            WHERE O.Id_Observatorio = 2
-            ORDER BY O.Fecha_Hora DESC
-        """
-        return db.fetch_all(sql)
-
+def get_observaciones(db, filtro="ambas"):
+    """
+    filtro:
+        "chile"  -> solo Nodo 1 · Chile   (WHERE Id_Observatorio = 1)
+        "espana" -> solo Nodo 2 · España  (WHERE Id_Observatorio = 2)
+        "ambas"  -> ambos nodos, sin filtro (federados por la vista global)
+    """
+    if filtro == "chile":
+        where_clause = "WHERE O.Id_Observatorio = 1"
+    elif filtro == "espana":
+        where_clause = "WHERE O.Id_Observatorio = 2"
+    elif filtro == "ambas":
+        where_clause = ""
     else:
-        raise ValueError(f"Sede no soportada: {db.sede!r}")
+        raise ValueError(f"Filtro de sede no soportado: {filtro!r}")
 
-
+    sql = f"""
+        SELECT O.Cod_Cientifico,
+               O.Id_Asteroide,
+               C.Primer_Nombre + ' ' + C.Primer_Apellido AS Cientifico,
+               A.Nombre  AS Asteroide,
+               O.Fecha_Hora,
+               O.Id_Observatorio,
+               O.Magnitud_Aparente,
+               O.Distancia_Relativa,
+               O.Velocidad_Aproximada AS Velocidad, -- Alias para la UI
+               E.Tipo_Espectral
+        FROM VistaGlobalObservaciones O
+        LEFT JOIN VistaGlobalCientificos C
+               ON C.Cod_Cientifico = O.Cod_Cientifico
+              AND C.Id_Observatorio = O.Id_Observatorio
+        LEFT JOIN Asteroide A ON A.Id_Asteroide = O.Id_Asteroide
+        LEFT JOIN Datos_Espectral E
+               ON E.Cod_Cientifico  = O.Cod_Cientifico
+              AND E.Id_Asteroide    = O.Id_Asteroide
+              AND E.Fecha_Hora      = O.Fecha_Hora
+              AND E.Id_Observatorio = O.Id_Observatorio
+        {where_clause}
+        ORDER BY O.Fecha_Hora DESC
+    """
+    return db.fetch_all(sql)
 # --------------------------------------------------------------------- #
 # CREATE
 # --------------------------------------------------------------------- #

@@ -99,6 +99,11 @@ class BaseCrudView(ctk.CTkFrame):
         )
         self.lbl_status.pack(side="right", padx=6)
 
+        # ---------------- Barra extra opcional (ej. filtros) ----------------
+        extra = self.build_extra_toolbar()
+        if extra is not None:
+            extra.pack(fill="x", pady=(0, 12))
+
         # ---------------- Tabla ----------------
         self.table = DataTable(self, columns)
         self.table.pack(fill="both", expand=True)
@@ -126,6 +131,16 @@ class BaseCrudView(ctk.CTkFrame):
 
     def row_tags(self, row):
         return None
+
+    def build_extra_toolbar(self):
+        """Hook opcional: si se devuelve un CTkFrame (con self como master),
+        se inserta entre la toolbar y la tabla (ej. filtros de sede)."""
+        return None
+
+    def can_modify(self, row):
+        """Hook opcional: permite vetar MODIFICAR/BORRAR sobre una fila
+        (ej. registros que pertenecen a un nodo distinto al conectado)."""
+        return True
 
     # ================= READ + refresco automático ================= #
     def refresh(self):
@@ -171,6 +186,14 @@ class BaseCrudView(ctk.CTkFrame):
                 parent=self.winfo_toplevel(),
             )
             return
+        if not self.can_modify(row):
+            messagebox.showwarning(
+                "Operación no permitida",
+                f"Solo puedes modificar {self.entity_name}s del nodo local "
+                f"({self.db.cfg['short']}).",
+                parent=self.winfo_toplevel(),
+            )
+            return
 
         def submit(data, modal):
             try:
@@ -197,6 +220,14 @@ class BaseCrudView(ctk.CTkFrame):
             messagebox.showinfo(
                 "Borrar",
                 f"Selecciona un {self.entity_name} en la tabla.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+        if not self.can_modify(row):
+            messagebox.showwarning(
+                "Operación no permitida",
+                f"Solo puedes borrar {self.entity_name}s del nodo local "
+                f"({self.db.cfg['short']}).",
                 parent=self.winfo_toplevel(),
             )
             return

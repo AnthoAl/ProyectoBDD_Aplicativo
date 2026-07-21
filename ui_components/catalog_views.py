@@ -9,6 +9,7 @@ Vistas CRUD para:
 
 from models import asteroides, cientificos, observatorios, programas
 from ui_components.base_crud_view import BaseCrudView
+from ui_components.sede_filter_mixin import SedeFilterMixin
 
 
 # ===================================================================== #
@@ -316,35 +317,37 @@ class ObservatoriosView(BaseCrudView):
 
 
 # ===================================================================== #
-# CIENTÍFICOS (fragmento local, lectura vía vista global)
+# CIENTÍFICOS (fragmento local; filtro CHILE / ESPAÑA / AMBAS)
 # ===================================================================== #
-class CientificosView(BaseCrudView):
-    view_title = "Científicos — Fragmento local"
+class CientificosView(SedeFilterMixin, BaseCrudView):
+    view_title = "Científicos"
     entity_name = "científico"
 
     COLUMNS = [
         {"key": "cod", "title": "CÓDIGO", "weight": 2, "anchor": "center"},
+        {"key": "sede", "title": "SEDE", "weight": 2, "anchor": "center"},
         {"key": "nom", "title": "PRIMER NOMBRE", "weight": 5, "anchor": "w"},
         {"key": "ape", "title": "PRIMER APELLIDO", "weight": 5, "anchor": "w"},
         {"key": "esp", "title": "ESPECIALIDAD", "weight": 4, "anchor": "w"},
         {"key": "nac", "title": "NACIONALIDAD", "weight": 4, "anchor": "w"},
-        {"key": "obs", "title": "ID OBS.", "weight": 1, "anchor": "center"},
     ]
 
     def __init__(self, master, db):
+        self._init_sede_filter(db)
         super().__init__(master, db, self.COLUMNS)
 
     def fetch_rows(self):
-        return cientificos.get_cientificos(self.db)
+        return cientificos.get_cientificos(self.db, self.filtro)
 
     def format_row(self, row, index):
+        sede_label = "CHILE" if row.get("Id_Observatorio") == 1 else "ESPAÑA"
         return (
             row["Cod_Cientifico"],
+            sede_label,
             row["Primer_Nombre"],
             row["Primer_Apellido"],
             row.get("Especialidad", ""),
             row["Nacionalidad"],
-            row["Id_Observatorio"],
         )
 
     def build_fields(self, row=None):
@@ -397,18 +400,19 @@ class CientificosView(BaseCrudView):
 
 
 # ===================================================================== #
-# PARTICIPACIONES (fragmento local; sin UPDATE por ser tabla puente)
+# PARTICIPACIONES (fragmento local; filtro CHILE / ESPAÑA / AMBAS;
+# sin UPDATE de las PK por ser tabla puente)
 # ===================================================================== #
-class ParticipacionesView(BaseCrudView):
+class ParticipacionesView(SedeFilterMixin, BaseCrudView):
     view_title = "Participaciones — Científico ⇄ Programa"
     entity_name = "participación"
 
     COLUMNS = [
         {"key": "cod", "title": "CÓD.", "weight": 1, "anchor": "center"},
+        {"key": "sede", "title": "SEDE", "weight": 2, "anchor": "center"},
         {"key": "nomc", "title": "CIENTÍFICO", "weight": 4, "anchor": "w"},
         {"key": "idp", "title": "ID PROG.", "weight": 1, "anchor": "center"},
         {"key": "ini", "title": "INICIO", "weight": 3, "anchor": "center"},
-        # {"key": "obs", "title": "ID OBS.", "weight": 1, "anchor": "center"},
         {"key": "fin", "title": "FIN", "weight": 3, "anchor": "center"},
         {"key": "mis", "title": "ROL", "weight": 4, "anchor": "w"},
     ]
@@ -416,9 +420,12 @@ class ParticipacionesView(BaseCrudView):
     def __init__(self, master, db):
         self._cient_map = {}
         self._prog_map = {}
+        self._init_sede_filter(db)
         super().__init__(master, db, self.COLUMNS, allow_edit=True)
 
     def fetch_rows(self):
+        # Los dropdowns del modal solo ofrecen científicos/programas
+        # con los que se puede escribir desde el nodo local conectado.
         self._cient_map = {
             f"{c['Cod_Cientifico']} — {c['Primer_Nombre']} {c['Primer_Apellido']}": c[
                 "Cod_Cientifico"
@@ -429,17 +436,18 @@ class ParticipacionesView(BaseCrudView):
             f"{p['Id_Programa']} — {p['Nombre_Mision']}": p["Id_Programa"]
             for p in programas.get_programas(self.db)
         }
-        return cientificos.get_participaciones(self.db)
+        return cientificos.get_participaciones(self.db, self.filtro)
 
     def format_row(self, row, index):
+        sede_label = "CHILE" if row.get("Id_Observatorio") == 1 else "ESPAÑA"
         return (
             row["Cod_Cientifico"],
+            sede_label,
             row.get("Cientifico") or "",
             row["Id_Programa"],
             str(row.get("Fecha_Inicio", ""))[
                 :10
             ],  # Cortamos la fecha para que se vea YYYY-MM-DD
-            # row["Id_Observatorio"],
             str(row.get("Fecha_Fin", ""))[:10],
             row["Rol_En_Mision"],
         )

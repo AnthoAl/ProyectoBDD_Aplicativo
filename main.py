@@ -26,8 +26,7 @@ from ui_components.catalog_views import (
     ParticipacionesView, ProgramasView,
 )
 from ui_components.login_view import LoginView
-from ui_components.observations_chile import ObservationsChile
-from ui_components.observations_spain import ObservationsSpain
+from ui_components.observations_view import ObservationsView
 from ui_components.sidebar import Sidebar
 from ui_components.topbar import Topbar
 
@@ -118,13 +117,7 @@ class App(ctk.CTk):
             self._current_view = None
 
         if route == "observaciones":
-            # ---- Bifurcación dinámica por sede seleccionada en Login ----
-            if self.sede == "chile":
-                view = ObservationsChile(self.content, self.db)
-            elif self.sede == "espana":
-                view = ObservationsSpain(self.content, self.db)
-            else:
-                raise RuntimeError(f"Sede inválida: {self.sede!r}")
+            view = ObservationsView(self.content, self.db)
 
         elif route == "asteroides":
             view = AsteroidesView(self.content, self.db)
