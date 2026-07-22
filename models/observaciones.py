@@ -45,6 +45,23 @@ def get_observaciones(db, filtro="ambas"):
     else:
         raise ValueError(f"Filtro de sede no soportado: {filtro!r}")
 
+    # Datos_Espectral solo existe físicamente en el servidor de España:
+    # referenciarla desde una conexión a Chile revienta con
+    # "Invalid object name 'Datos_Espectral'". Por eso el JOIN solo se
+    # arma cuando la conexión activa es España.
+    if db.sede == "espana":
+        tipo_col = "E.Tipo_Espectral"
+        join_espectral = """
+        LEFT JOIN Datos_Espectral E
+               ON E.Cod_Cientifico  = O.Cod_Cientifico
+              AND E.Id_Asteroide    = O.Id_Asteroide
+              AND E.Fecha_Hora      = O.Fecha_Hora
+              AND E.Id_Observatorio = O.Id_Observatorio
+        """
+    else:
+        tipo_col = "CAST(NULL AS VARCHAR(5))"
+        join_espectral = ""
+
     sql = f"""
         SELECT O.Cod_Cientifico,
                O.Id_Asteroide,
@@ -55,17 +72,13 @@ def get_observaciones(db, filtro="ambas"):
                O.Magnitud_Aparente,
                O.Distancia_Relativa,
                O.Velocidad_Aproximada AS Velocidad, -- Alias para la UI
-               E.Tipo_Espectral
+               {tipo_col} AS Tipo_Espectral
         FROM VistaGlobalObservaciones O
         LEFT JOIN VistaGlobalCientificos C
                ON C.Cod_Cientifico = O.Cod_Cientifico
               AND C.Id_Observatorio = O.Id_Observatorio
         LEFT JOIN Asteroide A ON A.Id_Asteroide = O.Id_Asteroide
-        LEFT JOIN Datos_Espectral E
-               ON E.Cod_Cientifico  = O.Cod_Cientifico
-              AND E.Id_Asteroide    = O.Id_Asteroide
-              AND E.Fecha_Hora      = O.Fecha_Hora
-              AND E.Id_Observatorio = O.Id_Observatorio
+        {join_espectral}
         {where_clause}
         ORDER BY O.Fecha_Hora DESC
     """
