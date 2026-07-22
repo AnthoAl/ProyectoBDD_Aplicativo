@@ -6,20 +6,19 @@ observations_chile.py / observations_spain.py).
 
 Incluye un filtro de SEDE (CHILE / ESPAÑA / AMBAS) que solo controla
 qué se MUESTRA, apoyado en VistaGlobalObservaciones (vista particionada
-global): sea cual sea el nodo al que esté conectado el operador, puede
-leer los registros de cualquiera de los dos nodos o de ambos a la vez.
+global).
 
-Reglas de escritura (no dependen del filtro de lectura, sino del nodo
-realmente conectado — self.db.sede):
-  * AGREGAR siempre crea el registro en el nodo local conectado.
-  * El campo "Tipo Espectral" (extensión vertical, exclusiva de España)
-    solo aparece en el formulario si el nodo conectado es España.
-  * MODIFICAR / BORRAR solo están habilitados sobre filas que pertenecen
-    al nodo local conectado, para preservar la atomicidad de la
-    extensión vertical Datos_Espectral (ver models/observaciones.py).
+TODO el CRUD (lecturas y escrituras) se centraliza SIEMPRE en la
+conexión de Chile, sin importar con qué sede inició sesión el
+operador: Chile tiene un Linked Server hacia España, así que puede
+leer y escribir registros de cualquiera de los dos nodos. La sede de
+cada observación se hereda del Científico elegido en el formulario
+(un científico pertenece a un solo nodo, y su observación se
+fragmenta junto con él) — ver models/observaciones.py.
 """
 
 from config import TIPOS_ESPECTRALES
+from db_connection import DBConnection
 from models import asteroides, cientificos, observaciones
 from ui_components.base_crud_view import BaseCrudView
 from ui_components.sede_filter_mixin import SedeFilterMixin
@@ -47,16 +46,23 @@ class ObservationsView(SedeFilterMixin, BaseCrudView):
         self._cient_map = {}
         self._aster_map = {}
         self._init_sede_filter(db)
-        super().__init__(master, db, COLUMNS)
+        # Todo el CRUD de esta vista se centraliza en Chile (Linked
+        # Server hacia España), sin importar la sede de la sesión.
+        db_chile = db if db.sede == "chile" else DBConnection("chile")
+        super().__init__(master, db_chile, COLUMNS)
 
     # ------------------------- READ ------------------------- #
     def fetch_rows(self):
-        # Catálogos para los dropdowns del modal (siempre del nodo local).
+        # Catálogos para los dropdowns del modal: científicos de AMBAS
+        # sedes (la sede de la observación se hereda del científico
+        # elegido), etiquetados para que se distinga su origen.
         self._cient_map = {
-            f"{c['Cod_Cientifico']} — {c['Primer_Nombre']} {c['Primer_Apellido']}": c[
-                "Cod_Cientifico"
-            ]
-            for c in cientificos.get_cientificos(self.db)
+            f"{c['Cod_Cientifico']} — {c['Primer_Nombre']} {c['Primer_Apellido']} "
+            f"({'CHILE' if c['Id_Observatorio'] == 1 else 'ESPAÑA'})": (
+                c["Cod_Cientifico"],
+                c["Id_Observatorio"],
+            )
+            for c in cientificos.get_cientificos(self.db, "ambas")
         }
         self._aster_map = {
             f"{a['Id_Asteroide']} — {a['Nombre']}": a["Id_Asteroide"]
@@ -166,10 +172,12 @@ class ObservationsView(SedeFilterMixin, BaseCrudView):
             },
         ]
 
-        # El Tipo Espectral es la extensión vertical exclusiva del Nodo
-        # España: solo se ofrece si el nodo conectado (el que va a
-        # recibir la escritura) es España.
-        if self.db.sede == "espana":
+        # El Tipo Espectral es la extensión vertical exclusiva de
+        # España. Al crear, la sede se conoce recién al elegir el
+        # científico (dropdown), así que el campo siempre se ofrece y
+        # simplemente se descarta si el científico resulta ser de
+        # Chile. Al editar, solo se ofrece si la fila ya es de España.
+        if not editing or row.get("Id_Observatorio") == 2:
             opciones_espectrales = [SIN_ESPECTRO] + [
                 f"{sigla} — {desc}" for sigla, desc in TIPOS_ESPECTRALES.items()
             ]
@@ -182,7 +190,7 @@ class ObservationsView(SedeFilterMixin, BaseCrudView):
 
             fields.append({
                 "key": "Tipo_Espectral",
-                "label": "Tipo espectral",
+                "label": "Tipo espectral (solo aplica si el científico es de España)",
                 "widget": "dropdown",
                 "mono": True,
                 "values": opciones_espectrales,
@@ -191,14 +199,14 @@ class ObservationsView(SedeFilterMixin, BaseCrudView):
 
         return fields
 
-    # ---------------------- Escrituras (siempre al nodo local) ---------------------- #
-    def _payload(self, data):
+    # ---------------------- Escrituras (siempre vía Chile) ---------------------- #
+    def _payload(self, data, id_observatorio):
         payload = {
             "Magnitud_Aparente": float(data["Magnitud_Aparente"]),
             "Distancia_Relativa": float(data["Distancia_Relativa"]),
             "Velocidad": float(data["Velocidad"]),
         }
-        if self.db.sede == "espana":
+        if id_observatorio == 2:
             tipo_ui = data.get("Tipo_Espectral")
             if tipo_ui in (None, SIN_ESPECTRO):
                 payload["Tipo_Espectral"] = None
@@ -207,32 +215,38 @@ class ObservationsView(SedeFilterMixin, BaseCrudView):
         return payload
 
     def do_insert(self, data):
-        payload = self._payload(data)
+        # La sede de la observación se hereda del científico elegido.
+        cod_cientifico, id_observatorio = self._cient_map.get(
+            data["Cod_Cientifico"], (data["Cod_Cientifico"], 1)
+        )
+        payload = self._payload(data, id_observatorio)
         payload.update(
             {
-                "Cod_Cientifico": self._cient_map.get(
-                    data["Cod_Cientifico"], data["Cod_Cientifico"]
-                ),
+                "Cod_Cientifico": cod_cientifico,
                 "Id_Asteroide": self._aster_map.get(
                     data["Id_Asteroide"], data["Id_Asteroide"]
                 ),
                 "Fecha_Hora": data["Fecha_Hora"],
+                "Id_Observatorio": id_observatorio,
             }
         )
         observaciones.insert_observacion(self.db, payload)
 
     def do_update(self, row, data):
+        id_observatorio = row["Id_Observatorio"]
         pk = {
             "Cod_Cientifico": row["Cod_Cientifico"],
             "Id_Asteroide": row["Id_Asteroide"],
             "Fecha_Hora": row["Fecha_Hora"],
+            "Id_Observatorio": id_observatorio,
         }
-        observaciones.update_observacion(self.db, pk, self._payload(data))
+        observaciones.update_observacion(self.db, pk, self._payload(data, id_observatorio))
 
     def do_delete(self, row):
         pk = {
             "Cod_Cientifico": row["Cod_Cientifico"],
             "Id_Asteroide": row["Id_Asteroide"],
             "Fecha_Hora": row["Fecha_Hora"],
+            "Id_Observatorio": row["Id_Observatorio"],
         }
         observaciones.delete_observacion(self.db, pk)

@@ -53,6 +53,8 @@ def get_cientificos(db, filtro="propio"):
 
 
 def insert_cientifico(db, data):
+    """data debe incluir "Id_Observatorio" (1 · Chile o 2 · España),
+    la sede real del registro — independiente de la conexión usada."""
     sql = """
         INSERT INTO VistaGlobalCientificos
             (Cod_Cientifico, Primer_Nombre, Primer_Apellido, Especialidad, Nacionalidad, Id_Observatorio)
@@ -66,7 +68,7 @@ def insert_cientifico(db, data):
             data["Primer_Apellido"],
             data["Especialidad"],
             data["Nacionalidad"],
-            db.cfg["id_observatorio"],
+            data["Id_Observatorio"],
         ),
     )
 
@@ -135,6 +137,9 @@ def get_participaciones(db, filtro="propio"):
 
 
 def insert_participacion(db, data):
+    """data debe incluir "Id_Observatorio": la participación se
+    fragmenta junto con su científico, así que se hereda de este
+    (ver ParticipacionesView.do_insert), no de la conexión usada."""
     sql = """
         INSERT INTO VistaGlobalParticipaciones (Cod_Cientifico, Id_Programa, Fecha_Inicio, Id_Observatorio, Fecha_Fin, Rol_En_Mision)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -145,7 +150,7 @@ def insert_participacion(db, data):
             data["Cod_Cientifico"],
             data["Id_Programa"],
             data["Fecha_Inicio"],
-            db.cfg["id_observatorio"],
+            data["Id_Observatorio"],
             data["Fecha_Fin"],
             data["Rol_En_Mision"],
         ),

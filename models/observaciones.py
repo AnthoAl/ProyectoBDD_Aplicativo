@@ -7,23 +7,48 @@ Fragmentos horizontales:
                       [Cod_Cientifico, Id_Asteroide, Fecha_Hora,
                        Id_Observatorio, Tipo_Espectral]
 
-Lecturas:
-    - VistaGlobalObservaciones, con LEFT JOIN permanente a Datos_Espectral
-      (fragmentación vertical), filtrable por sede vía el parámetro
-      `filtro` de get_observaciones(): "chile" (Id_Observatorio = 1),
-      "espana" (Id_Observatorio = 2) o "ambas" (sin filtro, federando
-      los dos nodos gracias a la transparencia de la vista particionada).
+Todo el CRUD de este módulo se centraliza en el servidor de Chile
+(ver ui_components/observations_view.py): sin importar con qué sede
+inició sesión el operador, las consultas se ejecutan siempre contra la
+conexión de Chile, y VistaGlobalObservaciones (vista particionada
+global, con Linked Server hacia España) enruta cada lectura/escritura
+al fragmento físico que corresponda según Id_Observatorio.
 
-Escrituras:
-    - Chile  : INSERT/UPDATE/DELETE directo sobre Datos_Observacion_001.
-    - España : Transacción ATÓMICA sobre Datos_Observacion_002 y, si aplica,
-               Datos_Espectral (commit conjunto, rollback conjunto).
+Datos_Espectral es la única tabla que NO forma parte de esa vista
+particionada: es una tabla física exclusiva del servidor de España.
+Por eso se referencia con nombre de 4 partes vía el Linked Server
+(config.LINKED_SERVER_ESPANA) cuando se consulta desde Chile, o con su
+nombre local cuando la conexión activa ya es España.
 
 Clave primaria compuesta asumida:
     (Cod_Cientifico, Id_Asteroide, Fecha_Hora, Id_Observatorio)
 """
 
+from config import LINKED_SERVER_ESPANA, NODES
+
 DATE_FMT_HINT = "YYYY-MM-DD HH:MM"
+
+
+# --------------------------------------------------------------------- #
+# Datos_Espectral: referencia calificada según desde dónde se consulte
+# --------------------------------------------------------------------- #
+def _espectral_ref(db):
+    if db.sede == "chile":
+        espana = NODES["espana"]
+        return f"[{LINKED_SERVER_ESPANA}].[{espana['database']}].dbo.Datos_Espectral"
+    return "Datos_Espectral"
+
+
+def _espectral_join(db):
+    ref = _espectral_ref(db)
+    join = f"""
+        LEFT JOIN {ref} E
+               ON E.Cod_Cientifico  = O.Cod_Cientifico
+              AND E.Id_Asteroide    = O.Id_Asteroide
+              AND E.Fecha_Hora      = O.Fecha_Hora
+              AND E.Id_Observatorio = O.Id_Observatorio
+    """
+    return "E.Tipo_Espectral", join
 
 
 # --------------------------------------------------------------------- #
@@ -45,22 +70,7 @@ def get_observaciones(db, filtro="ambas"):
     else:
         raise ValueError(f"Filtro de sede no soportado: {filtro!r}")
 
-    # Datos_Espectral solo existe físicamente en el servidor de España:
-    # referenciarla desde una conexión a Chile revienta con
-    # "Invalid object name 'Datos_Espectral'". Por eso el JOIN solo se
-    # arma cuando la conexión activa es España.
-    if db.sede == "espana":
-        tipo_col = "E.Tipo_Espectral"
-        join_espectral = """
-        LEFT JOIN Datos_Espectral E
-               ON E.Cod_Cientifico  = O.Cod_Cientifico
-              AND E.Id_Asteroide    = O.Id_Asteroide
-              AND E.Fecha_Hora      = O.Fecha_Hora
-              AND E.Id_Observatorio = O.Id_Observatorio
-        """
-    else:
-        tipo_col = "CAST(NULL AS VARCHAR(5))"
-        join_espectral = ""
+    tipo_col, join_espectral = _espectral_join(db)
 
     sql = f"""
         SELECT O.Cod_Cientifico,
@@ -83,62 +93,55 @@ def get_observaciones(db, filtro="ambas"):
         ORDER BY O.Fecha_Hora DESC
     """
     return db.fetch_all(sql)
+
+
 # --------------------------------------------------------------------- #
 # CREATE
 # --------------------------------------------------------------------- #
 def insert_observacion(db, data):
+    """data debe incluir "Id_Observatorio" (1 · Chile o 2 · España),
+    la sede real del registro — independiente de la conexión usada."""
     base_sql = """
         INSERT INTO VistaGlobalObservaciones
             (Cod_Cientifico, Id_Asteroide, Fecha_Hora, Id_Observatorio,
              Magnitud_Aparente, Distancia_Relativa, Velocidad_Aproximada)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     """
-    # Mapeamos data["Velocidad"] (viene de la UI) al campo de la BD
+    id_obs = data["Id_Observatorio"]
     base_params = (
         data["Cod_Cientifico"],
         data["Id_Asteroide"],
         data["Fecha_Hora"],
-        db.cfg["id_observatorio"],
+        id_obs,
         data["Magnitud_Aparente"],
         data["Distancia_Relativa"],
         data["Velocidad"],
     )
 
-    if db.sede == "chile":
-        return db.execute(base_sql, base_params)
-
-    elif db.sede == "espana":
-        # España requiere atomicidad con la tabla de extensión vertical
-        statements = [(base_sql, base_params)]
-        tipo = data.get("Tipo_Espectral")
-        if tipo:
-            statements.append(
-                (
-                    """
-                INSERT INTO Datos_Espectral
-                    (Cod_Cientifico, Id_Asteroide, Fecha_Hora,
-                     Id_Observatorio, Tipo_Espectral)
+    tipo = data.get("Tipo_Espectral")
+    if id_obs == 2 and tipo:
+        # Atomicidad: registro base + extensión vertical Datos_Espectral.
+        statements = [
+            (base_sql, base_params),
+            (
+                f"""
+                INSERT INTO {_espectral_ref(db)}
+                    (Cod_Cientifico, Id_Asteroide, Fecha_Hora, Id_Observatorio, Tipo_Espectral)
                 VALUES (?, ?, ?, 2, ?)
                 """,
-                    (
-                        data["Cod_Cientifico"],
-                        data["Id_Asteroide"],
-                        data["Fecha_Hora"],
-                        tipo,
-                    ),
-                )
-            )
+                (data["Cod_Cientifico"], data["Id_Asteroide"], data["Fecha_Hora"], tipo),
+            ),
+        ]
         return db.execute_transaction(statements)
 
-    else:
-        raise ValueError(f"Sede no soportada: {db.sede!r}")
+    return db.execute(base_sql, base_params)
 
 
 # --------------------------------------------------------------------- #
 # UPDATE
 # --------------------------------------------------------------------- #
 def update_observacion(db, pk, data):
-    # Transparencia total de ruteo: El WHERE ya no exige saber la Sede
+    """pk debe incluir "Id_Observatorio" (la sede real de la fila editada)."""
     base_sql = """
         UPDATE VistaGlobalObservaciones
         SET Magnitud_Aparente = ?, Distancia_Relativa = ?, Velocidad_Aproximada = ?
@@ -153,69 +156,60 @@ def update_observacion(db, pk, data):
         pk["Fecha_Hora"],
     )
 
-    if db.sede == "chile":
+    if pk["Id_Observatorio"] != 2:
         return db.execute(base_sql, base_params)
 
-    elif db.sede == "espana":
-        statements = [(base_sql, base_params)]
-
-        # Sincronizamos la extensión vertical (Borrar e insertar de nuevo)
-        statements.append(
-            (
-                """
-            DELETE FROM Datos_Espectral
+    # España: sincronizamos la extensión vertical (borrar e insertar de nuevo).
+    statements = [
+        (base_sql, base_params),
+        (
+            f"""
+            DELETE FROM {_espectral_ref(db)}
             WHERE Cod_Cientifico = ? AND Id_Asteroide = ? AND Fecha_Hora = ?
             """,
-                (pk["Cod_Cientifico"], pk["Id_Asteroide"], pk["Fecha_Hora"]),
-            )
-        )
+            (pk["Cod_Cientifico"], pk["Id_Asteroide"], pk["Fecha_Hora"]),
+        ),
+    ]
 
-        tipo = data.get("Tipo_Espectral")
-        if tipo:
-            statements.append(
-                (
-                    """
-                INSERT INTO Datos_Espectral
+    tipo = data.get("Tipo_Espectral")
+    if tipo:
+        statements.append(
+            (
+                f"""
+                INSERT INTO {_espectral_ref(db)}
                     (Cod_Cientifico, Id_Asteroide, Fecha_Hora, Id_Observatorio, Tipo_Espectral)
                 VALUES (?, ?, ?, 2, ?)
                 """,
-                    (pk["Cod_Cientifico"], pk["Id_Asteroide"], pk["Fecha_Hora"], tipo),
-                )
+                (pk["Cod_Cientifico"], pk["Id_Asteroide"], pk["Fecha_Hora"], tipo),
             )
+        )
 
-        return db.execute_transaction(statements)
-
-    else:
-        raise ValueError(f"Sede no soportada: {db.sede!r}")
+    return db.execute_transaction(statements)
 
 
 # --------------------------------------------------------------------- #
 # DELETE
 # --------------------------------------------------------------------- #
 def delete_observacion(db, pk):
-    # Transparencia total de ruteo: El WHERE ya no exige saber la Sede
+    """pk debe incluir "Id_Observatorio" (la sede real de la fila borrada)."""
     base_sql = """
         DELETE FROM VistaGlobalObservaciones
         WHERE Cod_Cientifico = ? AND Id_Asteroide = ? AND Fecha_Hora = ?
     """
     base_params = (pk["Cod_Cientifico"], pk["Id_Asteroide"], pk["Fecha_Hora"])
 
-    if db.sede == "chile":
+    if pk["Id_Observatorio"] != 2:
         return db.execute(base_sql, base_params)
 
-    elif db.sede == "espana":
-        # Primero borramos la dependencia (Datos_Espectral) por integridad referencial
-        statements = [
-            (
-                """
-                DELETE FROM Datos_Espectral
-                WHERE Cod_Cientifico = ? AND Id_Asteroide = ? AND Fecha_Hora = ?
-                """,
-                (pk["Cod_Cientifico"], pk["Id_Asteroide"], pk["Fecha_Hora"]),
-            ),
-            (base_sql, base_params),
-        ]
-        return db.execute_transaction(statements)
-
-    else:
-        raise ValueError(f"Sede no soportada: {db.sede!r}")
+    # Primero borramos la dependencia (Datos_Espectral) por integridad referencial.
+    statements = [
+        (
+            f"""
+            DELETE FROM {_espectral_ref(db)}
+            WHERE Cod_Cientifico = ? AND Id_Asteroide = ? AND Fecha_Hora = ?
+            """,
+            (pk["Cod_Cientifico"], pk["Id_Asteroide"], pk["Fecha_Hora"]),
+        ),
+        (base_sql, base_params),
+    ]
+    return db.execute_transaction(statements)

@@ -3,10 +3,15 @@ ui_components/catalog_views.py
 ------------------------------
 Vistas CRUD para:
   * Tablas GLOBALES REPLICADAS: Asteroide, Programa, Observatorio.
+    El CRUD se centraliza SIEMPRE en el servidor de Chile (igual que
+    Observaciones/Científicos/Participaciones): sin importar con qué
+    sede inició sesión el operador, se lee y escribe contra la copia
+    de Chile, para mantener una única fuente de verdad.
   * Fragmentos locales: Cientifico_00X, Participacion_00X
     (lectura vía vistas particionadas globales filtradas por nodo).
 """
 
+from db_connection import DBConnection
 from models import asteroides, cientificos, observatorios, programas
 from ui_components.base_crud_view import BaseCrudView
 from ui_components.sede_filter_mixin import SedeFilterMixin
@@ -28,15 +33,9 @@ class AsteroidesView(BaseCrudView):
     ]
 
     def __init__(self, master, db):
-        es_maestro = db.sede == "chile"
-        super().__init__(
-            master,
-            db,
-            self.COLUMNS,
-            allow_create=es_maestro,
-            allow_edit=es_maestro,
-            allow_delete=es_maestro,
-        )
+        # CRUD centralizado en Chile, sin importar la sede de la sesión.
+        db_chile = db if db.sede == "chile" else DBConnection("chile")
+        super().__init__(master, db_chile, self.COLUMNS)
 
     def fetch_rows(self):
         return asteroides.get_asteroides(self.db)
@@ -135,15 +134,9 @@ class ProgramasView(BaseCrudView):
     ESTADOS = ["Activo", "Finalizado"]
 
     def __init__(self, master, db):
-        es_maestro = db.sede == "chile"
-        super().__init__(
-            master,
-            db,
-            self.COLUMNS,
-            allow_create=es_maestro,
-            allow_edit=es_maestro,
-            allow_delete=es_maestro,
-        )
+        # CRUD centralizado en Chile, sin importar la sede de la sesión.
+        db_chile = db if db.sede == "chile" else DBConnection("chile")
+        super().__init__(master, db_chile, self.COLUMNS)
 
     def fetch_rows(self):
         return programas.get_programas(self.db)
@@ -234,15 +227,9 @@ class ObservatoriosView(BaseCrudView):
     ]
 
     def __init__(self, master, db):
-        es_maestro = db.sede == "chile"
-        super().__init__(
-            master,
-            db,
-            self.COLUMNS,
-            allow_create=es_maestro,
-            allow_edit=es_maestro,
-            allow_delete=es_maestro,
-        )
+        # CRUD centralizado en Chile, sin importar la sede de la sesión.
+        db_chile = db if db.sede == "chile" else DBConnection("chile")
+        super().__init__(master, db_chile, self.COLUMNS)
 
     def fetch_rows(self):
         return observatorios.get_observatorios(self.db)
@@ -317,7 +304,8 @@ class ObservatoriosView(BaseCrudView):
 
 
 # ===================================================================== #
-# CIENTÍFICOS (fragmento local; filtro CHILE / ESPAÑA / AMBAS)
+# CIENTÍFICOS (fragmento local; filtro CHILE / ESPAÑA / AMBAS; CRUD
+# centralizado siempre en Chile, sin importar la sede de la sesión)
 # ===================================================================== #
 class CientificosView(SedeFilterMixin, BaseCrudView):
     view_title = "Científicos"
@@ -334,7 +322,8 @@ class CientificosView(SedeFilterMixin, BaseCrudView):
 
     def __init__(self, master, db):
         self._init_sede_filter(db)
-        super().__init__(master, db, self.COLUMNS)
+        db_chile = db if db.sede == "chile" else DBConnection("chile")
+        super().__init__(master, db_chile, self.COLUMNS)
 
     def fetch_rows(self):
         return cientificos.get_cientificos(self.db, self.filtro)
@@ -352,7 +341,7 @@ class CientificosView(SedeFilterMixin, BaseCrudView):
 
     def build_fields(self, row=None):
         e = row is not None
-        return [
+        fields = [
             {
                 "key": "Cod_Cientifico",
                 "label": "Código científico (PK)",
@@ -386,9 +375,31 @@ class CientificosView(SedeFilterMixin, BaseCrudView):
                 "default": row["Nacionalidad"] if e else "",
             },
         ]
+        if e:
+            sede_label = "CHILE" if row.get("Id_Observatorio") == 1 else "ESPAÑA"
+            fields.append({
+                "key": "Sede",
+                "label": "Sede (no editable)",
+                "widget": "entry",
+                "mono": True,
+                "readonly": True,
+                "default": sede_label,
+            })
+        else:
+            fields.append({
+                "key": "Sede",
+                "label": "Sede",
+                "widget": "dropdown",
+                "mono": True,
+                "values": ["CHILE", "ESPAÑA"],
+                "default": "CHILE",
+            })
+        return fields
 
     def do_insert(self, data):
-        cientificos.insert_cientifico(self.db, data)
+        payload = dict(data)
+        payload["Id_Observatorio"] = 1 if data["Sede"] == "CHILE" else 2
+        cientificos.insert_cientifico(self.db, payload)
 
     def do_update(self, row, data):
         data = dict(data)
@@ -401,7 +412,8 @@ class CientificosView(SedeFilterMixin, BaseCrudView):
 
 # ===================================================================== #
 # PARTICIPACIONES (fragmento local; filtro CHILE / ESPAÑA / AMBAS;
-# sin UPDATE de las PK por ser tabla puente)
+# CRUD centralizado siempre en Chile; sin UPDATE de las PK por ser
+# tabla puente)
 # ===================================================================== #
 class ParticipacionesView(SedeFilterMixin, BaseCrudView):
     view_title = "Participaciones — Científico ⇄ Programa"
@@ -421,16 +433,19 @@ class ParticipacionesView(SedeFilterMixin, BaseCrudView):
         self._cient_map = {}
         self._prog_map = {}
         self._init_sede_filter(db)
-        super().__init__(master, db, self.COLUMNS, allow_edit=True)
+        db_chile = db if db.sede == "chile" else DBConnection("chile")
+        super().__init__(master, db_chile, self.COLUMNS, allow_edit=True)
 
     def fetch_rows(self):
-        # Los dropdowns del modal solo ofrecen científicos/programas
-        # con los que se puede escribir desde el nodo local conectado.
+        # El dropdown de científicos ofrece AMBAS sedes (la
+        # participación hereda la sede del científico elegido).
         self._cient_map = {
-            f"{c['Cod_Cientifico']} — {c['Primer_Nombre']} {c['Primer_Apellido']}": c[
-                "Cod_Cientifico"
-            ]
-            for c in cientificos.get_cientificos(self.db)
+            f"{c['Cod_Cientifico']} — {c['Primer_Nombre']} {c['Primer_Apellido']} "
+            f"({'CHILE' if c['Id_Observatorio'] == 1 else 'ESPAÑA'})": (
+                c["Cod_Cientifico"],
+                c["Id_Observatorio"],
+            )
+            for c in cientificos.get_cientificos(self.db, "ambas")
         }
         self._prog_map = {
             f"{p['Id_Programa']} — {p['Nombre_Mision']}": p["Id_Programa"]
@@ -538,17 +553,19 @@ class ParticipacionesView(SedeFilterMixin, BaseCrudView):
         return fields
 
     def do_insert(self, data):
+        # La participación hereda la sede del científico elegido.
+        cod_cientifico, id_observatorio = self._cient_map.get(
+            data["Cod_Cientifico"], (data["Cod_Cientifico"], 1)
+        )
         cientificos.insert_participacion(
             self.db,
             {
-                "Cod_Cientifico": self._cient_map.get(
-                    data["Cod_Cientifico"], data["Cod_Cientifico"]
-                ),
+                "Cod_Cientifico": cod_cientifico,
                 "Id_Programa": self._prog_map.get(
                     data["Id_Programa"], data["Id_Programa"]
                 ),
                 "Fecha_Inicio": data["Fecha_Inicio"],
-                # "Id_Observatorio": data["Id_Observatorio"],
+                "Id_Observatorio": id_observatorio,
                 "Fecha_Fin": data["Fecha_Fin"],
                 "Rol_En_Mision": data["Rol_En_Mision"],
             },

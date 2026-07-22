@@ -12,15 +12,16 @@ Uso en una subclase de BaseCrudView:
     class MiVista(SedeFilterMixin, BaseCrudView):
         def __init__(self, master, db):
             self._init_sede_filter(db)
-            super().__init__(master, db, self.COLUMNS)
+            db_chile = db if db.sede == "chile" else DBConnection("chile")
+            super().__init__(master, db_chile, self.COLUMNS)
 
         def fetch_rows(self):
             return mi_modelo.get_algo(self.db, self.filtro)
 
-Las escrituras (AGREGAR/MODIFICAR/BORRAR) siguen las reglas propias de
-cada fragmento y SIEMPRE apuntan al nodo local conectado (self.db.sede);
-el filtro de este mixin es solo de lectura. `can_modify()` veta
-modificar/borrar filas que pertenecen a un nodo distinto al conectado.
+El CRUD de estas vistas se centraliza SIEMPRE en la conexión de Chile
+(ver cada vista), sin importar con qué sede inició sesión el operador;
+por eso no hay restricción de "solo tu nodo" — cualquier fila, de
+cualquier sede, puede modificarse o borrarse.
 """
 
 import customtkinter as ctk
@@ -74,9 +75,3 @@ class SedeFilterMixin:
             else:
                 btn.configure(fg_color="transparent", hover_color=theme.BORDER,
                               text_color=theme.TEXT_SEC, border_color=theme.BORDER)
-
-    # ---------------- Permisos de escritura por fila ---------------- #
-    def can_modify(self, row):
-        # Solo se puede modificar/borrar lo que pertenece al nodo local
-        # conectado (evita escribir sobre el fragmento de otra sede).
-        return row.get("Id_Observatorio") == self.db.cfg["id_observatorio"]

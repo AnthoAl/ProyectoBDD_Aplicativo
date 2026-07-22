@@ -51,6 +51,16 @@ NODES = {
     },
 }
 
+# ---------------------------------------------------------------------------
+# Linked Server configurado EN el servidor de Chile, apuntando al
+# servidor de España (SQL Server Management Studio → Server Objects →
+# Linked Servers). Permite referenciar tablas exclusivas de España
+# (Datos_Espectral) con nombre de 4 partes desde la conexión de Chile,
+# que ahora concentra todo el CRUD de Observaciones/Científicos/
+# Participaciones sin importar con qué sede se inició sesión.
+# ---------------------------------------------------------------------------
+LINKED_SERVER_ESPANA = "DESKTOP-PB4S9LH"
+
 # Dominios válidos para la extensión vertical del Nodo 2 (Con su significado)
 TIPOS_ESPECTRALES = {
     "C": "Carbonáceo (Oscuro)",
